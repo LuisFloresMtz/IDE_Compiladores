@@ -39,7 +39,7 @@ class CodeEditor(QPlainTextEdit):
                 background-color: #1e1e1e;
                 color: white;
                 font-family: Consolas;
-                font-size: 14px;
+                font-size: 16px;
                 border: none;
             }
         """)

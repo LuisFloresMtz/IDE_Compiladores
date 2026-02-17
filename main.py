@@ -8,6 +8,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt
 
 from editor.code_editor import CodeEditor
+from ui.sidebar import FileExplorer
 
 
 class MainWindow(QMainWindow):
@@ -15,7 +16,6 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("IDE - Proyecto Compiladores")
-        self.resize(1200, 700)
 
         self.current_file = None
 
@@ -59,7 +59,8 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(self.editor)
         splitter.addWidget(self.tabs)
-        splitter.setSizes([700, 500])
+        splitter.setSizes([900, 300])
+
 
         container = QWidget()
         layout = QVBoxLayout()
@@ -68,9 +69,16 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(container)
 
-        # STATUS BAR (línea/columna)
+        # STATUS BAR
         self.cursor_label = QLabel("Ln 1, Col 1")
         self.statusBar().addPermanentWidget(self.cursor_label)
+
+        # SIDEBAR VS CODE
+        self.sidebar = FileExplorer(self)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.sidebar)
+
+        # Evento doble click
+        self.sidebar.tree.doubleClicked.connect(self.open_file_from_sidebar)
 
         # MENUS Y TOOLBAR
         self.create_menus()
@@ -80,7 +88,6 @@ class MainWindow(QMainWindow):
     def create_menus(self):
         menu_bar = self.menuBar()
 
-        # ---- Archivo
         file_menu = menu_bar.addMenu("Archivo")
 
         new_action = QAction("Nuevo", self)
@@ -110,7 +117,6 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(exit_action)
 
-        # ---- Compilar
         compile_menu = menu_bar.addMenu("Compilar")
 
         lexico_action = QAction("Análisis Léxico", self)
@@ -135,7 +141,7 @@ class MainWindow(QMainWindow):
         compile_menu.addSeparator()
         compile_menu.addAction(ejecutar_action)
 
-    # TOOLBAR (BOTONES RÁPIDOS)
+    # TOOLBAR
     def create_toolbar(self):
         toolbar = QToolBar("Acceso rápido")
         self.addToolBar(toolbar)
@@ -153,10 +159,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("IDE - Proyecto Compiladores (Nuevo archivo)")
 
     def open_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Abrir archivo", "", "Archivos (*.txt *.py *.c);;Todos (*.*)")
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Abrir archivo", "", "Archivos (*.txt *.py *.c);;Todos (*.*)"
+        )
+
         if file_path:
             with open(file_path, "r", encoding="utf-8") as f:
                 self.editor.setPlainText(f.read())
+
             self.current_file = file_path
             self.setWindowTitle(f"IDE - {file_path}")
 
@@ -171,7 +181,10 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Guardar", "Archivo guardado correctamente.")
 
     def save_file_as(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Guardar como", "", "Archivos (*.txt *.py *.c);;Todos (*.*)")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar como", "", "Archivos (*.txt *.py *.c);;Todos (*.*)"
+        )
+
         if file_path:
             self.current_file = file_path
             self.save_file()
@@ -181,46 +194,45 @@ class MainWindow(QMainWindow):
         self.current_file = None
         self.setWindowTitle("IDE - Proyecto Compiladores")
 
-    # COMPILACIÓN (POR AHORA PLACEHOLDER)
-    # Aquí después vas a meter system calls al compilador real
+    # COMPILACIÓN (placeholder)
     def run_lexico(self):
         self.lexico_output.setPlainText("Ejecutando análisis léxico...\n\n(Aquí irán los tokens)")
         self.tabs.setCurrentWidget(self.lexico_output)
 
     def run_sintactico(self):
-        self.sintactico_output.setPlainText("Ejecutando análisis sintáctico...\n\n(Aquí irá el árbol o salida estructurada)")
+        self.sintactico_output.setPlainText("Ejecutando análisis sintáctico...\n\n(Aquí irá el árbol)")
         self.tabs.setCurrentWidget(self.sintactico_output)
 
     def run_semantico(self):
-        self.semantico_output.setPlainText("Ejecutando análisis semántico...\n\n(Aquí irán validaciones y tipos)")
+        self.semantico_output.setPlainText("Ejecutando análisis semántico...\n\n(Aquí irán validaciones)")
         self.tabs.setCurrentWidget(self.semantico_output)
 
     def run_intermedio(self):
-        self.codigo_intermedio_output.setPlainText("Generando código intermedio...\n\n(Aquí irá el código de tres direcciones)")
+        self.codigo_intermedio_output.setPlainText("Generando código intermedio...\n\n(Aquí irá el código intermedio)")
         self.tabs.setCurrentWidget(self.codigo_intermedio_output)
 
     def run_ejecucion(self):
-        self.ejecucion_output.setPlainText("Ejecutando programa...\n\n(Aquí irá la salida del ejecutable)")
+        self.ejecucion_output.setPlainText("Ejecutando programa...\n\n(Aquí irá la salida)")
         self.tabs.setCurrentWidget(self.ejecucion_output)
 
-    # STATUS BAR (línea/columna)
+    # STATUS BAR
     def update_cursor_position(self, line, col):
         self.cursor_label.setText(f"Ln {line}, Col {col}")
-        
+
+    # ABRIR DESDE SIDEBAR
     def open_file_from_sidebar(self, index):
         file_path = self.sidebar.model.filePath(index)
-    
-        # Si es carpeta, no hacer nada
+
         if self.sidebar.model.isDir(index):
             return
-    
+
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 self.editor.setPlainText(f.read())
-    
+
             self.current_file = file_path
             self.setWindowTitle(f"IDE - {file_path}")
-    
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo abrir el archivo:\n{str(e)}")
 
@@ -229,4 +241,5 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
+    window.showMaximized()
     sys.exit(app.exec())
