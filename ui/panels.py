@@ -1,35 +1,69 @@
-from PySide6.QtWidgets import QTabWidget, QTextEdit
+from PySide6.QtWidgets import QDockWidget, QTabWidget, QTextEdit
+from PySide6.QtCore import Qt
 
 
-class OutputPanels(QTabWidget):
-    def __init__(self):
-        super().__init__()
+class OutputPanels(QDockWidget):
+    def __init__(self, parent=None):
+        super().__init__("Consola", parent)
 
-        self.lexico_output = QTextEdit()
-        self.lexico_output.setReadOnly(True)
+        self.setAllowedAreas(Qt.BottomDockWidgetArea)
+        self.setFeatures(QDockWidget.NoDockWidgetFeatures)
 
-        self.sintactico_output = QTextEdit()
-        self.sintactico_output.setReadOnly(True)
+        self.tabs = QTabWidget()
 
-        self.semantico_output = QTextEdit()
-        self.semantico_output.setReadOnly(True)
+        # Crear outputs tipo consola
+        self.lexico_output = self.create_console()
+        self.sintactico_output = self.create_console()
+        self.semantico_output = self.create_console()
+        self.codigo_intermedio_output = self.create_console()
+        self.tabla_simbolos_output = self.create_console()
+        self.errores_output = self.create_console()
+        self.ejecucion_output = self.create_console()
 
-        self.codigo_intermedio_output = QTextEdit()
-        self.codigo_intermedio_output.setReadOnly(True)
+        self.tabs.addTab(self.lexico_output, "Léxico")
+        self.tabs.addTab(self.sintactico_output, "Sintáctico")
+        self.tabs.addTab(self.semantico_output, "Semántico")
+        self.tabs.addTab(self.codigo_intermedio_output, "Intermedio")
+        self.tabs.addTab(self.tabla_simbolos_output, "Tabla Símbolos")
+        self.tabs.addTab(self.errores_output, "Errores")
+        self.tabs.addTab(self.ejecucion_output, "Ejecución")
 
-        self.tabla_simbolos_output = QTextEdit()
-        self.tabla_simbolos_output.setReadOnly(True)
+        # 🎨 Estilo tabs
+        self.tabs.setStyleSheet("""
+        QTabWidget::pane {
+            border: none;
+            background: #1e1e1e;
+        }
 
-        self.errores_output = QTextEdit()
-        self.errores_output.setReadOnly(True)
+        QTabBar::tab {
+            background: #2d2d30;
+            color: #d4d4d4;
+            padding: 6px;
+        }
 
-        self.ejecucion_output = QTextEdit()
-        self.ejecucion_output.setReadOnly(True)
+        QTabBar::tab:selected {
+            background: #3c3f41;
+        }
 
-        self.addTab(self.lexico_output, "Léxico (Tokens)")
-        self.addTab(self.sintactico_output, "Sintáctico")
-        self.addTab(self.semantico_output, "Semántico")
-        self.addTab(self.codigo_intermedio_output, "Código Intermedio")
-        self.addTab(self.tabla_simbolos_output, "Tabla de Símbolos")
-        self.addTab(self.errores_output, "Errores")
-        self.addTab(self.ejecucion_output, "Ejecución")
+        QTabBar::tab:hover {
+            background: #37373d;
+        }
+        """)
+
+        self.setWidget(self.tabs)
+
+    def create_console(self):
+        console = QTextEdit()
+        console.setReadOnly(True)
+
+        console.setStyleSheet("""
+        QTextEdit {
+            background-color: #111111;
+            color: #00ff88;
+            border: none;
+            font-family: Consolas;
+            font-size: 13px;
+        }
+        """)
+
+        return console

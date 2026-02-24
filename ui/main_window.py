@@ -1,13 +1,13 @@
-import sys
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QFileDialog, QMessageBox,
-    QTabWidget, QTextEdit, QSplitter, QWidget, QVBoxLayout,
-    QLabel, QToolBar, QDockWidget, QTreeView
+    QMainWindow, QLabel, QFileDialog, QMessageBox
 )
-from PySide6.QtGui import QAction, QFileSystemModel
 from PySide6.QtCore import Qt
 
 from editor.code_editor import CodeEditor
+from ui.panels import OutputPanels   # Debe heredar de QDockWidget
+from ui.sidebar import FileExplorer
+# from ui.tool_bar import create_toolbar
+from ui.menu_bar import create_menu_bar
 
 
 class MainWindow(QMainWindow):
@@ -19,200 +19,114 @@ class MainWindow(QMainWindow):
 
         self.current_file = None
 
-        # EDITOR PRINCIPAL
+        # EDITOR CENTRAL
         self.editor = CodeEditor()
         self.editor.cursorPositionInfo.connect(self.update_cursor_position)
+        self.setCentralWidget(self.editor)
 
-        # PANELES DE RESULTADOS (Tabs)
-        self.tabs = QTabWidget()
+        # PANEL INFERIOR (CONSOLA)
+        self.output_panel = OutputPanels(self)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.output_panel)
 
-        self.lexico_output = QTextEdit()
-        self.lexico_output.setReadOnly(True)
+        self.resizeDocks(
+            [self.output_panel],
+            [200],
+            Qt.Vertical
+        )
 
-        self.sintactico_output = QTextEdit()
-        self.sintactico_output.setReadOnly(True)
+        # SIDEBAR
+        self.sidebar = FileExplorer(self)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.sidebar)
+        self.sidebar.tree.doubleClicked.connect(self.open_file_from_sidebar)
 
-        self.semantico_output = QTextEdit()
-        self.semantico_output.setReadOnly(True)
-
-        self.codigo_intermedio_output = QTextEdit()
-        self.codigo_intermedio_output.setReadOnly(True)
-
-        self.tabla_simbolos_output = QTextEdit()
-        self.tabla_simbolos_output.setReadOnly(True)
-
-        self.errores_output = QTextEdit()
-        self.errores_output.setReadOnly(True)
-
-        self.ejecucion_output = QTextEdit()
-        self.ejecucion_output.setReadOnly(True)
-
-        self.tabs.addTab(self.lexico_output, "Léxico (Tokens)")
-        self.tabs.addTab(self.sintactico_output, "Sintáctico")
-        self.tabs.addTab(self.semantico_output, "Semántico")
-        self.tabs.addTab(self.codigo_intermedio_output, "Código Intermedio")
-        self.tabs.addTab(self.tabla_simbolos_output, "Tabla de Símbolos")
-        self.tabs.addTab(self.errores_output, "Errores")
-        self.tabs.addTab(self.ejecucion_output, "Ejecución")
-
-        # SPLITTER PRINCIPAL
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(self.editor)
-        splitter.addWidget(self.tabs)
-        splitter.setSizes([700, 500])
-
-        container = QWidget()
-        layout = QVBoxLayout()
-        layout.addWidget(splitter)
-        container.setLayout(layout)
-
-        self.setCentralWidget(container)
-
-        # STATUS BAR (línea/columna)
+        # STATUS BAR
         self.cursor_label = QLabel("Ln 1, Col 1")
         self.statusBar().addPermanentWidget(self.cursor_label)
 
-        # SIDEBAR TIPO VSCODE (Explorador de archivos)
-        self.create_sidebar()
+        # MENU Y TOOLBAR
+        create_menu_bar(self)
+        # create_toolbar(self)
 
-        # MENUS Y TOOLBAR
-        self.create_menus()
-        self.create_toolbar()
+        # ESTILO OSCURO
+        self.setStyleSheet("""
+        QMainWindow { background-color: #2b2b2b; }
 
-    # SIDEBAR
-    def create_sidebar(self):
-        self.sidebar = QDockWidget("Explorador", self)
-        self.sidebar.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        QMenuBar {
+            background-color: #2b2b2b;
+            color: white;
+        }
 
-        self.tree = QTreeView()
+        QMenuBar::item:selected {
+            background-color: #3c3f41;
+        }
 
-        self.model = QFileSystemModel()
-        self.model.setRootPath(".")
+        QMenu {
+            background-color: #2b2b2b;
+            color: white;
+        }
 
-        self.tree.setModel(self.model)
-        self.tree.setRootIndex(self.model.index("."))
+        QToolBar {
+            background-color: #313335;
+        }
 
-        self.tree.setHeaderHidden(True)
+        QToolButton {
+            background-color: #3c3f41;
+            color: white;
+            padding: 5px;
+        }
 
-        # Ocultar columnas extras
-        self.tree.setColumnHidden(1, True)
-        self.tree.setColumnHidden(2, True)
-        self.tree.setColumnHidden(3, True)
+        QToolButton:hover {
+            background-color: #505354;
+        }
 
-        self.tree.doubleClicked.connect(self.open_file_from_sidebar)
+        QDockWidget {
+            background-color: #2b2b2b;
+            color: white;
+        }
 
-        self.sidebar.setWidget(self.tree)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.sidebar)
+        QTabWidget::pane {
+            background: #1e1e1e;
+        }
 
-    # MENÚS
-    def create_menus(self):
-        menu_bar = self.menuBar()
+        QTabBar::tab {
+            background: #2d2d2d;
+            color: white;
+            padding: 6px;
+        }
 
-        # ---- Archivo
-        file_menu = menu_bar.addMenu("Archivo")
+        QTabBar::tab:selected {
+            background: #3c3f41;
+        }
+        """)
 
-        new_action = QAction("Nuevo", self)
-        new_action.triggered.connect(self.new_file)
+    # STATUS
+    def update_cursor_position(self, line, col):
+        self.cursor_label.setText(f"Ln {line}, Col {col}")
 
-        open_action = QAction("Abrir", self)
-        open_action.triggered.connect(self.open_file)
-
-        close_action = QAction("Cerrar", self)
-        close_action.triggered.connect(self.close_file)
-
-        save_action = QAction("Guardar", self)
-        save_action.triggered.connect(self.save_file)
-
-        save_as_action = QAction("Guardar como", self)
-        save_as_action.triggered.connect(self.save_file_as)
-
-        exit_action = QAction("Salir", self)
-        exit_action.triggered.connect(self.close)
-
-        file_menu.addAction(new_action)
-        file_menu.addAction(open_action)
-        file_menu.addAction(close_action)
-        file_menu.addSeparator()
-        file_menu.addAction(save_action)
-        file_menu.addAction(save_as_action)
-        file_menu.addSeparator()
-        file_menu.addAction(exit_action)
-
-        # ---- Compilar
-        compile_menu = menu_bar.addMenu("Compilar")
-
-        lexico_action = QAction("Análisis Léxico", self)
-        lexico_action.triggered.connect(self.run_lexico)
-
-        sintactico_action = QAction("Análisis Sintáctico", self)
-        sintactico_action.triggered.connect(self.run_sintactico)
-
-        semantico_action = QAction("Análisis Semántico", self)
-        semantico_action.triggered.connect(self.run_semantico)
-
-        intermedio_action = QAction("Código Intermedio", self)
-        intermedio_action.triggered.connect(self.run_intermedio)
-
-        ejecutar_action = QAction("Ejecución", self)
-        ejecutar_action.triggered.connect(self.run_ejecucion)
-
-        compile_menu.addAction(lexico_action)
-        compile_menu.addAction(sintactico_action)
-        compile_menu.addAction(semantico_action)
-        compile_menu.addAction(intermedio_action)
-        compile_menu.addSeparator()
-        compile_menu.addAction(ejecutar_action)
-
-    # TOOLBAR (BOTONES RÁPIDOS)
-    def create_toolbar(self):
-        toolbar = QToolBar("Acceso rápido")
-        self.addToolBar(toolbar)
-
-        toolbar.addAction("Léxico", self.run_lexico)
-        toolbar.addAction("Sintáctico", self.run_sintactico)
-        toolbar.addAction("Semántico", self.run_semantico)
-        toolbar.addAction("Intermedio", self.run_intermedio)
-        toolbar.addAction("Ejecutar", self.run_ejecucion)
-
-    # ARCHIVOS
+    # FILES
     def new_file(self):
         self.editor.clear()
         self.current_file = None
-        self.setWindowTitle("IDE - Proyecto Compiladores (Nuevo archivo)")
 
     def open_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Abrir archivo",
-            "",
-            "Archivos (*.txt *.py *.c);;Todos (*.*)"
+            self, "Abrir archivo", "", "Archivos (*.txt *.py *.c);;Todos (*.*)"
         )
-
         if file_path:
             with open(file_path, "r", encoding="utf-8") as f:
                 self.editor.setPlainText(f.read())
-
             self.current_file = file_path
-            self.setWindowTitle(f"IDE - {file_path}")
 
     def save_file(self):
-        if self.current_file is None:
-            self.save_file_as()
-            return
-
-        with open(self.current_file, "w", encoding="utf-8") as f:
-            f.write(self.editor.toPlainText())
-
-        QMessageBox.information(self, "Guardar", "Archivo guardado correctamente.")
+        if self.current_file:
+            with open(self.current_file, "w", encoding="utf-8") as f:
+                f.write(self.editor.toPlainText())
+            QMessageBox.information(self, "Guardar", "Archivo guardado.")
 
     def save_file_as(self):
         file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Guardar como",
-            "",
-            "Archivos (*.txt *.py *.c);;Todos (*.*)"
+            self, "Guardar como", "", "Archivos (*.txt *.py *.c);;Todos (*.*)"
         )
-
         if file_path:
             self.current_file = file_path
             self.save_file()
@@ -220,53 +134,28 @@ class MainWindow(QMainWindow):
     def close_file(self):
         self.editor.clear()
         self.current_file = None
-        self.setWindowTitle("IDE - Proyecto Compiladores")
 
-    # COMPILACIÓN (PLACEHOLDER)
+    # COMPILER (usa output_panel)
     def run_lexico(self):
-        self.lexico_output.setPlainText("Ejecutando análisis léxico...\n\n(Aquí irán los tokens)")
-        self.tabs.setCurrentWidget(self.lexico_output)
+        self.output_panel.lexico_output.setPlainText("Análisis Léxico...")
 
     def run_sintactico(self):
-        self.sintactico_output.setPlainText("Ejecutando análisis sintáctico...\n\n(Aquí irá el árbol o salida estructurada)")
-        self.tabs.setCurrentWidget(self.sintactico_output)
+        self.output_panel.sintactico_output.setPlainText("Análisis Sintáctico...")
 
     def run_semantico(self):
-        self.semantico_output.setPlainText("Ejecutando análisis semántico...\n\n(Aquí irán validaciones y tipos)")
-        self.tabs.setCurrentWidget(self.semantico_output)
+        self.output_panel.semantico_output.setPlainText("Análisis Semántico...")
 
     def run_intermedio(self):
-        self.codigo_intermedio_output.setPlainText("Generando código intermedio...\n\n(Aquí irá el código de tres direcciones)")
-        self.tabs.setCurrentWidget(self.codigo_intermedio_output)
+        self.output_panel.codigo_intermedio_output.setPlainText("Código Intermedio...")
 
     def run_ejecucion(self):
-        self.ejecucion_output.setPlainText("Ejecutando programa...\n\n(Aquí irá la salida del ejecutable)")
-        self.tabs.setCurrentWidget(self.ejecucion_output)
+        self.output_panel.ejecucion_output.setPlainText("Ejecución...")
 
-    # STATUS BAR (línea/columna)
-    def update_cursor_position(self, line, col):
-        self.cursor_label.setText(f"Ln {line}, Col {col}")
-
-    # ABRIR ARCHIVO DESDE SIDEBAR
+    # SIDEBAR
     def open_file_from_sidebar(self, index):
-        file_path = self.model.filePath(index)
-
-        if self.model.isDir(index):
+        file_path = self.sidebar.model.filePath(index)
+        if self.sidebar.model.isDir(index):
             return
-
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                self.editor.setPlainText(f.read())
-
-            self.current_file = file_path
-            self.setWindowTitle(f"IDE - {file_path}")
-
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"No se pudo abrir el archivo:\n{str(e)}")
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
+        with open(file_path, "r", encoding="utf-8") as f:
+            self.editor.setPlainText(f.read())
+        self.current_file = file_path

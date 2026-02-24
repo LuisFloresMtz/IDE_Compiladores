@@ -6,12 +6,10 @@ class FileExplorer(QDockWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # Quitar barra superior completamente (sin espacio)
         empty = QWidget()
         empty.setFixedHeight(0)
         self.setTitleBarWidget(empty)
 
-        # No movible, no flotante, no cerrable
         self.setFeatures(QDockWidget.NoDockWidgetFeatures)
         self.setAllowedAreas(Qt.LeftDockWidgetArea)
 
@@ -27,9 +25,30 @@ class FileExplorer(QDockWidget):
         self.tree.setColumnHidden(2, True)
         self.tree.setColumnHidden(3, True)
 
+        self.tree.setStyleSheet("""
+        QTreeView {
+            background-color: #252526;
+            color: #d4d4d4;
+            border: none;
+        }
+
+        QTreeView::item:selected {
+            background-color: #37373d;
+        }
+
+        QTreeView::item:hover {
+            background-color: #2a2d2e;
+        }
+
+        QScrollBar:vertical {
+            background: #1e1e1e;
+            width: 10px;
+        }
+
+        QScrollBar::handle:vertical {
+            background: #3c3c3c;
+            border-radius: 5px;
+        }
+        """)
+
         self.setWidget(self.tree)
-        self.tree.setStyleSheet("QTreeView { border: none; }")
-
-
-    def set_directory(self, path):
-        self.tree.setRootIndex(self.model.index(path))
