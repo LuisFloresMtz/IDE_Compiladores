@@ -50,3 +50,8 @@ class TabEditor(QWidget):
         if index >= 0:
             return self.editors[index]
         return None
+    
+    def close_current_tab(self):
+        index = self.tabs.currentIndex()
+        if index != -1:
+            self.close_tab(index)
