@@ -108,7 +108,7 @@ class MainWindow(QMainWindow):
 
     # FILES
     def new_file(self):
-        self.tabeditor.add_tab("Nuevo.txt")
+        self.tabeditor.add_tab("sin titulo")
         self.current_file = None
 
     def open_file(self):
@@ -124,19 +124,38 @@ class MainWindow(QMainWindow):
             self.current_file = file_path
 
     def save_file(self):
-        editor = self.tabeditor.current_editor()
-        if editor and self.current_file:
-            with open(self.current_file, "w", encoding="utf-8") as f:
-                f.write(editor.toPlainText())
-            QMessageBox.information(self, "Guardar", "Archivo guardado.")
+        if self.current_file is None:
+            self.save_file_as()
+            return
+
+        with open(self.current_file, "w", encoding="utf-8") as f:
+            f.write(self.tabeditor.current_editor().toPlainText())
+
+        QMessageBox.information(self, "Guardar", "Archivo guardado.")
 
     def save_file_as(self):
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Guardar como", "", "Archivos (*.txt *.py *.c);;Todos (*.*)"
+            self,
+            "Guardar como",
+            "",
+            "Archivos (*.txt *.py *.c);;Todos (*.*)"
         )
-        if file_path:
-            self.current_file = file_path
-            self.save_file()
+
+        if not file_path:
+            return
+
+        # Guardar ruta
+        self.current_file = file_path
+
+        # Guardar contenido
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(self.tabeditor.current_editor().toPlainText())
+
+        # Cambiar nombre de la pestaña al nombre real del archivo
+        filename = file_path.split("/")[-1]
+        self.tabeditor.set_current_tab_name(filename)
+
+        QMessageBox.information(self, "Guardar", "Archivo guardado.")
 
     def close_file(self):
         self.tabeditor.close_current_tab()

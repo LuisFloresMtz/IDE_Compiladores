@@ -55,3 +55,8 @@ class TabEditor(QWidget):
         index = self.tabs.currentIndex()
         if index != -1:
             self.close_tab(index)
+
+    def set_current_tab_name(self, name):
+        index = self.tabs.currentIndex()
+        if index != -1:
+            self.tabs.setTabText(index, name)
