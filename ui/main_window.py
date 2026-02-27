@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from editor.code_editor import CodeEditor
+from editor.tab_editor import TabEditor
 from ui.panels import OutputPanels   # Debe heredar de QDockWidget
 from ui.sidebar import FileExplorer
 # from ui.tool_bar import create_toolbar
@@ -20,9 +20,12 @@ class MainWindow(QMainWindow):
         self.current_file = None
 
         # EDITOR CENTRAL
-        self.editor = CodeEditor()
-        self.editor.cursorPositionInfo.connect(self.update_cursor_position)
-        self.setCentralWidget(self.editor)
+        self.tabeditor = TabEditor()
+        self.setCentralWidget(self.tabeditor)
+
+        editor = self.tabeditor.current_editor()
+        if editor:
+            editor.cursorPositionInfo.connect(self.update_cursor_position)
 
         # PANEL INFERIOR (CONSOLA)
         self.output_panel = OutputPanels(self)
@@ -105,7 +108,7 @@ class MainWindow(QMainWindow):
 
     # FILES
     def new_file(self):
-        self.editor.clear()
+        self.tabeditor.add_tab("Nuevo.txt")
         self.current_file = None
 
     def open_file(self):
@@ -113,14 +116,18 @@ class MainWindow(QMainWindow):
             self, "Abrir archivo", "", "Archivos (*.txt *.py *.c);;Todos (*.*)"
         )
         if file_path:
-            with open(file_path, "r", encoding="utf-8") as f:
-                self.editor.setPlainText(f.read())
+            self.tabeditor.add_tab(file_path.split("/")[-1])
+            editor = self.tabeditor.current_editor()
+            if editor:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    editor.setPlainText(f.read())
             self.current_file = file_path
 
     def save_file(self):
-        if self.current_file:
+        editor = self.tabeditor.current_editor()
+        if editor and self.current_file:
             with open(self.current_file, "w", encoding="utf-8") as f:
-                f.write(self.editor.toPlainText())
+                f.write(editor.toPlainText())
             QMessageBox.information(self, "Guardar", "Archivo guardado.")
 
     def save_file_as(self):
@@ -132,7 +139,7 @@ class MainWindow(QMainWindow):
             self.save_file()
 
     def close_file(self):
-        self.editor.clear()
+        self.tabeditor.close_current_tab()
         self.current_file = None
 
     # COMPILER (usa output_panel)
@@ -156,6 +163,11 @@ class MainWindow(QMainWindow):
         file_path = self.sidebar.model.filePath(index)
         if self.sidebar.model.isDir(index):
             return
-        with open(file_path, "r", encoding="utf-8") as f:
-            self.editor.setPlainText(f.read())
+
+        self.tabeditor.add_tab(file_path.split("/")[-1])
+        editor = self.tabeditor.current_editor()
+        if editor:
+            with open(file_path, "r", encoding="utf-8") as f:
+                editor.setPlainText(f.read())
+
         self.current_file = file_path
