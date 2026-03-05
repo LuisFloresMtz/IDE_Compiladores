@@ -2,30 +2,110 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabBar
 from PySide6.QtCore import Qt
 from editor.code_editor import CodeEditor
 
+
+try:
+    from ui.top_bar import COLORS
+except ImportError:
+    COLORS = {
+        "bg_dark":      "#1e1e2e",
+        "bg_bar":       "#181825",
+        "bg_hover":     "#313244",
+        "bg_pressed":   "#45475a",
+        "accent":       "#89b4fa",
+        "accent_dim":   "#585b70",
+        "text":         "#cdd6f4",
+        "text_dim":     "#a6adc8",
+        "border":       "#313244",
+    }
+
+
+TABBAR_STYLE = f"""
+QTabBar {{
+    background: {COLORS['bg_bar']};
+    border-bottom: 1px solid {COLORS['border']};
+}}
+
+QTabBar::tab {{
+    background: {COLORS['bg_bar']};
+    color: {COLORS['text_dim']};
+    font-family: 'Segoe UI', 'SF Pro Text', sans-serif;
+    font-size: 13px;
+    padding: 7px 20px 7px 14px;
+    border: none;
+    border-right: 1px solid {COLORS['border']};
+    border-bottom: 2px solid transparent;
+    min-width: 100px;
+    max-width: 220px;
+}}
+
+QTabBar::tab:selected {{
+    background: {COLORS['bg_dark']};
+    color: {COLORS['text']};
+    border-bottom: 2px solid {COLORS['accent']};
+}}
+
+QTabBar::tab:hover:!selected {{
+    background: {COLORS['bg_hover']};
+    color: {COLORS['text']};
+}}
+
+/* Botón de cerrar (×) */
+QTabBar::close-button {{
+    subcontrol-position: right;
+    padding: 2px;
+    border-radius: 3px;
+}}
+
+QTabBar::close-button:hover {{
+    background: {COLORS['bg_pressed']};
+}}
+"""
+
+EDITOR_CONTAINER_STYLE = f"""
+QWidget#editorContainer {{
+    background: {COLORS['bg_dark']};
+    border: none;
+}}
+"""
+
+
 class TabEditor(QWidget):
     def __init__(self):
         super().__init__()
+        self.setObjectName("editorContainer")
+        self.setStyleSheet(EDITOR_CONTAINER_STYLE)
 
+        self.editors: list[CodeEditor] = []
+
+        # ── Tab bar ───────────────────────────────────────────────────────────
         self.tabs = QTabBar()
-        self.editors = []   # 👈 lista de CodeEditor
-
         self.tabs.setMovable(True)
         self.tabs.setTabsClosable(True)
+        self.tabs.setExpanding(False)           # tabs con ancho fijo, no se estiran
+        self.tabs.setDrawBase(False)            # sin línea extra debajo del tabbar
+        self.tabs.setStyleSheet(TABBAR_STYLE)
 
+        # ── Layouts ───────────────────────────────────────────────────────────
         self.editor_layout = QVBoxLayout()
         self.editor_layout.setContentsMargins(0, 0, 0, 0)
+        self.editor_layout.setSpacing(0)
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         main_layout.addWidget(self.tabs)
         main_layout.addLayout(self.editor_layout)
 
-        self.add_tab("Nuevo.txt")
-
+        # ── Señales ───────────────────────────────────────────────────────────
         self.tabs.currentChanged.connect(self.change_tab)
         self.tabs.tabCloseRequested.connect(self.close_tab)
 
-    def add_tab(self, filename):
+        # ── Tab inicial ───────────────────────────────────────────────────────
+        self.add_tab("Nuevo.txt")
+
+    # ── API pública ───────────────────────────────────────────────────────────
+
+    def add_tab(self, filename: str):
         editor = CodeEditor()
         self.editors.append(editor)
 
@@ -35,18 +115,29 @@ class TabEditor(QWidget):
         self.editor_layout.addWidget(editor)
         editor.show()
 
-    def change_tab(self, index):
+    def change_tab(self, index: int):
         for i, editor in enumerate(self.editors):
             editor.setVisible(i == index)
 
-    def close_tab(self, index):
+    def close_tab(self, index: int):
+        if len(self.editors) == 1:
+            # No cerrar la última pestaña — limpiar en su lugar
+            self.editors[0].clear()
+            self.tabs.setTabText(0, "Nuevo.txt")
+            return
+
         editor = self.editors.pop(index)
         editor.deleteLater()
         self.tabs.removeTab(index)
 
-    # ✅ ESTE ES EL PASO CLAVE
-    def current_editor(self):
+    def current_editor(self) -> CodeEditor | None:
         index = self.tabs.currentIndex()
-        if index >= 0:
+        if 0 <= index < len(self.editors):
             return self.editors[index]
         return None
+
+    def set_tab_title(self, title: str, index: int | None = None):
+        """Actualiza el título de la pestaña actual o de la indicada."""
+        idx = index if index is not None else self.tabs.currentIndex()
+        if 0 <= idx < self.tabs.count():
+            self.tabs.setTabText(idx, title)

@@ -1,25 +1,85 @@
-from PySide6.QtWidgets import (
-    QMainWindow, QLabel, QFileDialog, QMessageBox
-)
+from PySide6.QtWidgets import QMainWindow, QLabel, QFileDialog, QMessageBox
 from PySide6.QtCore import Qt
 
 from editor.tab_editor import TabEditor
-from ui.panels import OutputPanels   # Debe heredar de QDockWidget
+from ui.panels import OutputPanels
 from ui.sidebar import FileExplorer
-# from ui.tool_bar import create_toolbar
+from ui.top_bar import create_top_bar, COLORS
 from ui.menu_bar import create_menu_bar
+from ui.tool_bar import create_toolbar
+
+
+# ── Estilo global de la ventana principal ─────────────────────────────────────
+MAIN_STYLE = f"""
+QMainWindow {{
+    background-color: {COLORS['bg_dark']};
+}}
+
+/* Status bar */
+QStatusBar {{
+    background-color: {COLORS['bg_bar']};
+    color: {COLORS['text_dim']};
+    font-family: 'Segoe UI', 'SF Pro Text', sans-serif;
+    font-size: 12px;
+    border-top: 1px solid {COLORS['border']};
+}}
+
+QStatusBar QLabel {{
+    color: {COLORS['text_dim']};
+    padding: 0 8px;
+}}
+
+/* Splitter entre paneles */
+QSplitter::handle {{
+    background: {COLORS['border']};
+    width: 1px;
+    height: 1px;
+}}
+
+/* Dock widgets */
+QDockWidget {{
+    titlebar-close-icon: none;
+    titlebar-normal-icon: none;
+}}
+
+/* Tooltip global */
+QToolTip {{
+    background-color: {COLORS['bg_bar']};
+    color: {COLORS['text']};
+    border: 1px solid {COLORS['border']};
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 12px;
+}}
+
+/* Diálogos (open/save) */
+QFileDialog {{
+    background-color: {COLORS['bg_dark']};
+    color: {COLORS['text']};
+}}
+
+QMessageBox {{
+    background-color: {COLORS['bg_dark']};
+    color: {COLORS['text']};
+}}
+"""
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("IDE - Proyecto Compiladores")
-        self.resize(1200, 700)
+        self.setWindowTitle("IDE Compiladores")
+        self.resize(1280, 760)
+        self.setMinimumSize(800, 500)
 
-        self.current_file = None
+        self.current_file: str | None = None
 
-        # EDITOR CENTRAL
+        # ── Estilos globales ──────────────────────────────────────────────────
+        self.setStyleSheet(MAIN_STYLE)
+
+        # ── Editor central (tabs) ─────────────────────────────────────────────
         self.tabeditor = TabEditor()
         self.setCentralWidget(self.tabeditor)
 
@@ -27,147 +87,138 @@ class MainWindow(QMainWindow):
         if editor:
             editor.cursorPositionInfo.connect(self.update_cursor_position)
 
-        # PANEL INFERIOR (CONSOLA)
+        # ── Panel inferior (consola) ──────────────────────────────────────────
         self.output_panel = OutputPanels(self)
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.output_panel)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.output_panel)
+        self.resizeDocks([self.output_panel], [200], Qt.Orientation.Vertical)
 
-        self.resizeDocks(
-            [self.output_panel],
-            [200],
-            Qt.Vertical
-        )
-
-        # SIDEBAR
+        # ── Sidebar (explorador de archivos) ──────────────────────────────────
         self.sidebar = FileExplorer(self)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.sidebar)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.sidebar)
+        self.resizeDocks([self.sidebar], [220], Qt.Orientation.Horizontal)
         self.sidebar.tree.doubleClicked.connect(self.open_file_from_sidebar)
 
-        # STATUS BAR
+        # ── Status bar ────────────────────────────────────────────────────────
         self.cursor_label = QLabel("Ln 1, Col 1")
         self.statusBar().addPermanentWidget(self.cursor_label)
+        self.statusBar().showMessage("Listo")
 
-        # MENU Y TOOLBAR
-        create_menu_bar(self)
-        # create_toolbar(self)
+        # ── Menú y barra de herramientas ──────────────────────────────────────
+        menu_bar, tool_bar = create_top_bar(self)
+        create_menu_bar(self, menu_bar)
+        create_toolbar(self, tool_bar)
 
-        # ESTILO OSCURO
-        self.setStyleSheet("""
-        QMainWindow { background-color: #2b2b2b; }
+    # ── Status bar ────────────────────────────────────────────────────────────
 
-        QMenuBar {
-            background-color: #2b2b2b;
-            color: white;
-        }
-
-        QMenuBar::item:selected {
-            background-color: #3c3f41;
-        }
-
-        QMenu {
-            background-color: #2b2b2b;
-            color: white;
-        }
-
-        QToolBar {
-            background-color: #313335;
-        }
-
-        QToolButton {
-            background-color: #3c3f41;
-            color: white;
-            padding: 5px;
-        }
-
-        QToolButton:hover {
-            background-color: #505354;
-        }
-
-        QDockWidget {
-            background-color: #2b2b2b;
-            color: white;
-        }
-
-        QTabWidget::pane {
-            background: #1e1e1e;
-        }
-
-        QTabBar::tab {
-            background: #2d2d2d;
-            color: white;
-            padding: 6px;
-        }
-
-        QTabBar::tab:selected {
-            background: #3c3f41;
-        }
-        """)
-
-    # STATUS
-    def update_cursor_position(self, line, col):
+    def update_cursor_position(self, line: int, col: int):
         self.cursor_label.setText(f"Ln {line}, Col {col}")
 
-    # FILES
+    # ── Gestión de archivos ───────────────────────────────────────────────────
+
     def new_file(self):
         self.tabeditor.add_tab("Nuevo.txt")
         self.current_file = None
+        self.statusBar().showMessage("Nuevo archivo creado")
 
     def open_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Abrir archivo", "", "Archivos (*.txt *.py *.c);;Todos (*.*)"
+            self, "Abrir archivo", "",
+            "Archivos de código (*.txt *.py *.c *.h *.cpp *.java);;Todos (*.*)"
         )
-        if file_path:
-            self.tabeditor.add_tab(file_path.split("/")[-1])
-            editor = self.tabeditor.current_editor()
-            if editor:
+        if not file_path:
+            return
+
+        filename = file_path.split("/")[-1]
+        self.tabeditor.add_tab(filename)
+
+        editor = self.tabeditor.current_editor()
+        if editor:
+            try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     editor.setPlainText(f.read())
-            self.current_file = file_path
+                editor.cursorPositionInfo.connect(self.update_cursor_position)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudo abrir el archivo:\n{e}")
+                return
+
+        self.current_file = file_path
+        self.statusBar().showMessage(f"Abierto: {filename}")
 
     def save_file(self):
         editor = self.tabeditor.current_editor()
-        if editor and self.current_file:
+        if not editor:
+            return
+
+        if not self.current_file:
+            self.save_file_as()
+            return
+
+        try:
             with open(self.current_file, "w", encoding="utf-8") as f:
                 f.write(editor.toPlainText())
-            QMessageBox.information(self, "Guardar", "Archivo guardado.")
+            self.statusBar().showMessage(f"Guardado: {self.current_file.split('/')[-1]}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo guardar:\n{e}")
 
     def save_file_as(self):
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Guardar como", "", "Archivos (*.txt *.py *.c);;Todos (*.*)"
+            self, "Guardar como", "",
+            "Archivos de código (*.txt *.py *.c *.h *.cpp *.java);;Todos (*.*)"
         )
-        if file_path:
-            self.current_file = file_path
-            self.save_file()
+        if not file_path:
+            return
+
+        self.current_file = file_path
+        self.tabeditor.set_tab_title(file_path.split("/")[-1])
+        self.save_file()
 
     def close_file(self):
-        self.tabeditor.close_current_tab()
+        self.tabeditor.close_tab(self.tabeditor.tabs.currentIndex())
         self.current_file = None
 
-    # COMPILER (usa output_panel)
+    # ── Análisis / Compilación ────────────────────────────────────────────────
+
+    def _get_source(self) -> str | None:
+        editor = self.tabeditor.current_editor()
+        return editor.toPlainText() if editor else None
+
     def run_lexico(self):
-        self.output_panel.lexico_output.setPlainText("Análisis Léxico...")
+        src = self._get_source()
+        if src is not None:
+            self.output_panel.write(self.output_panel.lexico_output, "▶ Análisis Léxico iniciado…", "info")
+            # TODO: conectar al analizador léxico real y usar write() con kind apropiado
 
     def run_sintactico(self):
-        self.output_panel.sintactico_output.setPlainText("Análisis Sintáctico...")
+        self.output_panel.write(self.output_panel.sintactico_output, "▶ Análisis Sintáctico iniciado…", "info")
 
     def run_semantico(self):
-        self.output_panel.semantico_output.setPlainText("Análisis Semántico...")
+        self.output_panel.write(self.output_panel.semantico_output, "▶ Análisis Semántico iniciado…", "info")
 
     def run_intermedio(self):
-        self.output_panel.codigo_intermedio_output.setPlainText("Código Intermedio...")
+        self.output_panel.write(self.output_panel.codigo_intermedio_output, "▶ Generando código intermedio…", "info")
 
     def run_ejecucion(self):
-        self.output_panel.ejecucion_output.setPlainText("Ejecución...")
+        self.output_panel.write(self.output_panel.ejecucion_output, "▶ Ejecutando…", "success")
 
-    # SIDEBAR
+    # ── Sidebar ───────────────────────────────────────────────────────────────
+
     def open_file_from_sidebar(self, index):
         file_path = self.sidebar.model.filePath(index)
         if self.sidebar.model.isDir(index):
             return
 
-        self.tabeditor.add_tab(file_path.split("/")[-1])
+        filename = file_path.split("/")[-1]
+        self.tabeditor.add_tab(filename)
+
         editor = self.tabeditor.current_editor()
         if editor:
-            with open(file_path, "r", encoding="utf-8") as f:
-                editor.setPlainText(f.read())
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    editor.setPlainText(f.read())
+                editor.cursorPositionInfo.connect(self.update_cursor_position)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudo abrir:\n{e}")
+                return
 
         self.current_file = file_path
+        self.statusBar().showMessage(f"Abierto: {filename}")
