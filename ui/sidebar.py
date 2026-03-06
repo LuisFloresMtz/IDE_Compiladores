@@ -159,6 +159,7 @@ class FileExplorer(QDockWidget):
                 font-weight: 600;
                 border: none;
                 padding: 0;
+                border-bottom: 10px solid transparent;
             }}
         """)
         title_layout.addWidget(title_label)

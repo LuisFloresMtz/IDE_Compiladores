@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QDockWidget, QTabWidget, QTextEdit, QWidget, QLabel, QHBoxLayout, QVBoxLayout
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QTextCharFormat, QColor, QTextCursor
+from PySide6.QtGui import QTextCharFormat, QColor, QTextCursor
 
 
 try:
@@ -30,13 +30,14 @@ CONSOLE_COLORS = {
 }
 
 TABS_STYLE = f"""
+QTabWidget {{
+    border: none;
+}}
+
 QTabWidget::pane {{
     border: none;
     background: {CONSOLE_COLORS['bg']};
-}}
-
-QTabBar {{
-    background: {COLORS['bg_bar']};
+    top: 0px;
 }}
 
 QTabBar::tab {{
@@ -56,17 +57,13 @@ QTabBar::tab:hover {{
 }}
 
 QTabBar::tab:selected {{
-    background: {COLORS['bg_dark']};
+    background: {COLORS['bg_bar']};
     color: {COLORS['accent']};
     border-bottom: 2px solid {COLORS['accent']};
 }}
 
 QTabBar::tab:!selected {{
-    margin-top: 2px;
-}}
-
-QTabBar {{
-    margin-top: 8px;
+    margin-top: 0px;
 }}
 """
 
@@ -129,19 +126,50 @@ class OutputPanels(QDockWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        empty = QWidget()
-        empty.setFixedSize(0, 0)
-        self.setTitleBarWidget(empty)
+        # ── Suprimir title bar nativo ─────────────────────────────────────────
+        self.setTitleBarWidget(QWidget())   # widget vacío = sin title bar
 
         # ── Dock config ───────────────────────────────────────────────────────
         self.setAllowedAreas(Qt.DockWidgetArea.BottomDockWidgetArea)
         self.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
 
+        # ── Contenedor raíz ───────────────────────────────────────────────────
+        # Un solo QWidget con VBox: primero la barra de título, luego los tabs.
+        # Esto evita cualquier empalme porque son dos widgets en un layout secuencial.
+        root = QWidget()
+        root.setStyleSheet(f"background: {COLORS['bg_bar']}; border: none;")
+        root_layout = QVBoxLayout(root)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        # ── Barra de título (header) ──────────────────────────────────────────
+        header = QWidget()
+        header.setFixedHeight(26)
+        header.setStyleSheet(f"""
+            background-color: {COLORS['bg_bar']};
+            border-top: 1px solid {COLORS['border']};
+            border-bottom: none;
+        """)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(10, 0, 10, 0)
+        header_layout.setSpacing(0)
+
+        title_label = QLabel("CONSOLA")
+        title_label.setStyleSheet(f"""
+            color: {COLORS['text_dim']};
+            background: transparent;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 11px;
+            letter-spacing: 1px;
+            font-weight: 600;
+        """)
+        header_layout.addWidget(title_label)
+        header_layout.addStretch()
+
         # ── Tabs ──────────────────────────────────────────────────────────────
         self.tabs = QTabWidget()
         self.tabs.setStyleSheet(TABS_STYLE)
         self.tabs.setDocumentMode(True)
-
 
         self.lexico_output            = self._create_console()
         self.sintactico_output        = self._create_console()
@@ -151,7 +179,7 @@ class OutputPanels(QDockWidget):
         self.errores_output           = self._create_console()
         self.ejecucion_output         = self._create_console()
 
-        tab_items = [
+        for console, label in [
             (self.lexico_output,            "Léxico"),
             (self.sintactico_output,        "Sintáctico"),
             (self.semantico_output,         "Semántico"),
@@ -159,12 +187,16 @@ class OutputPanels(QDockWidget):
             (self.tabla_simbolos_output,    "Símbolos"),
             (self.errores_output,           "Errores"),
             (self.ejecucion_output,         "Ejecución"),
-        ]
+        ]:
+            self.tabs.addTab(console, label)
 
-        for widget, label in tab_items:
-            self.tabs.addTab(widget, label)
+        # header primero, tabs después — en orden vertical
+        root_layout.addWidget(header)
+        root_layout.addWidget(self.tabs)
 
-        self.setWidget(self.tabs)
+        self.setWidget(root)
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _create_console(self) -> QTextEdit:
         console = QTextEdit()
