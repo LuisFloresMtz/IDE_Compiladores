@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabBar
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTabBar, QToolButton
 from PySide6.QtCore import Qt
 from editor.code_editor import CodeEditor
 
@@ -30,7 +30,7 @@ QTabBar::tab {{
     color: {COLORS['text_dim']};
     font-family: 'Segoe UI', 'SF Pro Text', sans-serif;
     font-size: 13px;
-    padding: 7px 20px 7px 14px;
+    padding: 7px 8px 7px 14px;
     border: none;
     border-right: 1px solid {COLORS['border']};
     border-bottom: 2px solid transparent;
@@ -49,15 +49,20 @@ QTabBar::tab:hover:!selected {{
     color: {COLORS['text']};
 }}
 
-/* Botón de cerrar (×) */
-QTabBar::close-button {{
-    subcontrol-position: right;
-    padding: 2px;
-    border-radius: 3px;
-}}
+"""
 
-QTabBar::close-button:hover {{
+CLOSE_BTN_STYLE = f"""
+QToolButton {{
+    background: transparent;
+    color: {COLORS['text_dim']};
+    border: none;
+    border-radius: 3px;
+    font-size: 16px;
+    padding: 0px 0px 2px 0px;
+}}
+QToolButton:hover {{
     background: {COLORS['bg_pressed']};
+    color: {COLORS['text']};
 }}
 """
 
@@ -80,7 +85,7 @@ class TabEditor(QWidget):
         # ── Tab bar ───────────────────────────────────────────────────────────
         self.tabs = QTabBar()
         self.tabs.setMovable(True)
-        self.tabs.setTabsClosable(True)
+        self.tabs.setTabsClosable(False)
         self.tabs.setExpanding(False)           # tabs con ancho fijo, no se estiran
         self.tabs.setDrawBase(False)            # sin línea extra debajo del tabbar
         self.tabs.setStyleSheet(TABBAR_STYLE)
@@ -105,11 +110,35 @@ class TabEditor(QWidget):
 
     # ── API pública ───────────────────────────────────────────────────────────
 
+    def _make_close_btn(self) -> QWidget:
+        btn = QToolButton()
+        btn.setText("×")
+        btn.setFixedSize(20, 20)
+        btn.setStyleSheet(CLOSE_BTN_STYLE)
+
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 6, 0)
+        layout.setSpacing(0)
+        layout.addWidget(btn)
+        container.setFixedSize(26, 20)
+
+        btn.clicked.connect(lambda checked=False, c=container: self._close_tab_by_button(c))
+        return container
+
+    def _close_tab_by_button(self, container: QWidget):
+        for i in range(self.tabs.count()):
+            if self.tabs.tabButton(i, QTabBar.ButtonPosition.RightSide) is container:
+                self.close_tab(i)
+                break
+
     def add_tab(self, filename: str):
         editor = CodeEditor()
         self.editors.append(editor)
 
         index = self.tabs.addTab(filename)
+        self.tabs.setTabButton(index, QTabBar.ButtonPosition.RightSide, self._make_close_btn())
         self.tabs.setCurrentIndex(index)
 
         self.editor_layout.addWidget(editor)

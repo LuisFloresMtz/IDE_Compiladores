@@ -129,7 +129,7 @@ def create_top_bar(main_window):
     top_widget = QWidget()
     top_widget.setObjectName("topBar")
     top_widget.setStyleSheet(TOP_WIDGET_STYLE)
-    top_widget.setFixedHeight(36)
+    top_widget.setFixedHeight(40)
 
     layout = QHBoxLayout()
     layout.setContentsMargins(0, 0, 0, 0)
@@ -144,7 +144,6 @@ def create_top_bar(main_window):
     tool_bar = QToolBar()
     tool_bar.setMovable(False)
     tool_bar.setStyleSheet(TOOLBAR_STYLE)
-    tool_bar.setIconSize(__import__('PySide6.QtCore', fromlist=['QSize']).QSize(18, 18))
     layout.addWidget(tool_bar)
 
     top_widget.setLayout(layout)

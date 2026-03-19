@@ -120,7 +120,7 @@ def getToken():
         if char == '"':
             token += char
             return ('STRING_LITERAL', token)
-        return ('UNKNOWN', token)   # cadena sin cerrar
+        return ('ERROR', token)   # cadena sin cerrar
 
     # Entrada IGUAL (= / ==)
     elif char == '=':
@@ -212,7 +212,7 @@ def getToken():
             char = getNextChar()
             while True:
                 if char is None:
-                    return ('UNKNOWN', token)   # comentario sin cerrar
+                    return ('ERROR', token)   # comentario sin cerrar
                 if char == '*':
                     token += char
                     char = getNextChar()
@@ -228,7 +228,7 @@ def getToken():
             return ('OPERATOR', token)
 
     else:
-        return ('UNKNOWN', char)
+        return ('ERROR', char)
 
 
 if __name__ == '__main__':

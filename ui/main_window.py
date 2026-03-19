@@ -6,7 +6,24 @@ from ui.panels import OutputPanels
 from ui.sidebar import FileExplorer
 from ui.top_bar import create_top_bar, COLORS
 from ui.menu_bar import create_menu_bar
+from ui.tool_bar import create_toolbar
 from lexical_analyzer.lexical_analyzer import tokenize
+
+MAIN_STYLE = f"""
+QMainWindow {{
+    background-color: {COLORS['bg_dark']};
+}}
+QStatusBar {{
+    background-color: {COLORS['bg_bar']};
+    color: {COLORS['text_dim']};
+    border-top: 1px solid {COLORS['border']};
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 12px;
+}}
+QDockWidget {{
+    background: {COLORS['bg_dark']};
+}}
+"""
 
 
 class MainWindow(QMainWindow):
@@ -149,8 +166,8 @@ class MainWindow(QMainWindow):
                     lines.append(valor)
                 else:
                     lines.append(f"{tipo}   {valor}")
-                if tipo == 'UNKNOWN':
-                    errors.append(f"Token desconocido: {valor}")
+                if tipo == 'ERROR':
+                    errors.append(f"Token no reconocido: {valor}")
 
             self.output_panel.lexico_output.setPlainText("\n".join(lines))
 

@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QPlainTextEdit, QWidget, QTextEdit
-from PySide6.QtGui import QColor, QPainter, QTextFormat, QTextCursor, QFont
+from PySide6.QtGui import QColor, QPainter, QTextFormat, QTextCursor
 from PySide6.QtCore import Qt, QRect, QSize, Signal
 
 
@@ -37,7 +37,7 @@ QPlainTextEdit {{
     background-color: {EDITOR['bg']};
     color: {EDITOR['text']};
     font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
-    font-size: 14px;
+    font-size: 10pt;
     border: none;
     selection-background-color: {EDITOR['selection']};
     selection-color: {EDITOR['text']};
@@ -134,7 +134,7 @@ class CodeEditor(QPlainTextEdit):
     def updateLineNumberAreaWidth(self, _):
         self.setViewportMargins(self.lineNumberAreaWidth(), 0, 0, 0)
 
-    def updateLineNumberArea(self, *args):
+    def updateLineNumberArea(self, *_):
         self.lineNumberArea.update()
 
     def resizeEvent(self, event):
@@ -167,14 +167,8 @@ class CodeEditor(QPlainTextEdit):
                 # Número activo más brillante
                 if block_number == current_block_number:
                     painter.setPen(QColor(EDITOR["gutter_active"]))
-                    font = painter.font()
-                    font.setBold(True)
-                    painter.setFont(font)
                 else:
                     painter.setPen(QColor(EDITOR["gutter_text"]))
-                    font = painter.font()
-                    font.setBold(False)
-                    painter.setFont(font)
 
                 painter.drawText(
                     0, top,

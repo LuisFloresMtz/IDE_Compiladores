@@ -4,7 +4,7 @@ from PySide6.QtGui import QIcon
 
 
 # Tamaño de iconos uniforme
-ICON_SIZE = QSize(18, 18)
+ICON_SIZE = QSize(23, 23)
 
 # Tooltips descriptivos para cada acción
 ACTION_TOOLTIPS = {
