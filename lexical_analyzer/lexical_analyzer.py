@@ -3,12 +3,10 @@ tokenTypes = {
     'IDENTIFIER': 2,
     'INTEGER': 3,
     'FLOAT': 4,
-    'OPERATOR': 5,
-    'DELIMITER': 6,
-    'STRING_LITERAL': 7,
-    'COMMENT': 8,
-    'WHITESPACE': 9,
-    'UNKNOWN': 10
+    'STRING_LITERAL': 5,
+    'COMMENT': 6,
+    'WHITESPACE': 7,
+    'ERROR': 8
 }
 
 line = ""
