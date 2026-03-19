@@ -8,6 +8,7 @@ from ui.panels import OutputPanels   # Debe heredar de QDockWidget
 from ui.sidebar import FileExplorer
 # from ui.tool_bar import create_toolbar
 from ui.menu_bar import create_menu_bar
+from lexical_analyzer.lexical_analyzer import tokenize
 
 
 class MainWindow(QMainWindow):
@@ -142,9 +143,51 @@ class MainWindow(QMainWindow):
         self.tabeditor.close_current_tab()
         self.current_file = None
 
+    def _show_output(self, tab_index):
+        self.output_panel.show()
+        self.output_panel.raise_()
+        self.output_panel.tabs.setCurrentIndex(tab_index)
+
     # COMPILER (usa output_panel)
     def run_lexico(self):
-        self.output_panel.lexico_output.setPlainText("Análisis Léxico...")
+        import traceback
+        try:
+            editor = self.tabeditor.current_editor()
+            if not editor:
+                self.output_panel.lexico_output.setPlainText("No hay ningún archivo abierto.")
+                self._show_output(0)
+                return
+
+            source = editor.toPlainText()
+            tokens = tokenize(source)
+
+            if not tokens:
+                self.output_panel.lexico_output.setPlainText("(sin tokens)")
+                self._show_output(0)
+                return
+
+            lines = []
+            errors = []
+            for tipo, valor in tokens:
+                if tipo in ('OPERATOR', 'DELIMITER'):
+                    lines.append(valor)
+                else:
+                    lines.append(f"{tipo}   {valor}")
+                if tipo == 'UNKNOWN':
+                    errors.append(f"Token desconocido: {valor}")
+
+            self.output_panel.lexico_output.setPlainText("\n".join(lines))
+
+            if errors:
+                self.output_panel.errores_output.setPlainText("\n".join(errors))
+            else:
+                self.output_panel.errores_output.setPlainText("Sin errores léxicos.")
+
+            self._show_output(0)
+
+        except Exception:
+            self.output_panel.lexico_output.setPlainText(traceback.format_exc())
+            self._show_output(0)
 
     def run_sintactico(self):
         self.output_panel.sintactico_output.setPlainText("Análisis Sintáctico...")
