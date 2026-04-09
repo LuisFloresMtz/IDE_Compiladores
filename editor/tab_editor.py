@@ -20,7 +20,7 @@ class TabEditor(QWidget):
         main_layout.addWidget(self.tabs)
         main_layout.addLayout(self.editor_layout)
 
-        self.add_tab("Nuevo.txt")
+        self.add_tab("sin titulo")
 
         self.tabs.currentChanged.connect(self.change_tab)
         self.tabs.tabCloseRequested.connect(self.close_tab)
