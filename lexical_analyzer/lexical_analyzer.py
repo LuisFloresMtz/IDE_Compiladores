@@ -65,6 +65,33 @@ def tokenize(source):
     return tokens
 
 
+def tokenize_with_positions(source):
+    """Como tokenize(), pero devuelve (tipo, valor, start, end) con los
+    offsets (en caracteres) de cada token dentro de `source`. Útil para
+    resaltar sintaxis en el editor."""
+    global _source, _source_pos, EOF_flag
+    _source = source
+    _source_pos = 0
+    EOF_flag = False
+    tokens = []
+    while True:
+        # Saltar whitespace aquí para poder capturar el offset inicial
+        # del siguiente token antes de que getToken consuma caracteres.
+        while _source_pos < len(_source) and _source[_source_pos].isspace():
+            _source_pos += 1
+        if _source_pos >= len(_source):
+            break
+        EOF_flag = False
+        start = _source_pos
+        tok = getToken()
+        if tok is None:
+            break
+        end = _source_pos
+        tokens.append((tok[0], tok[1], start, end))
+    _source = None
+    return tokens
+
+
 def getToken():
     token = ""
     char = getNextChar()
@@ -102,10 +129,12 @@ def getToken():
                     ungetChar()
                 return ('FLOAT', token)
             else:
+                # Longest match: se consumió el punto pero no hay dígitos
+                # después → toda la subcadena "NN." es un token inválido.
                 if char is not None:
                     ungetChar()  # retrocede el char leído tras el punto
-                ungetChar()      # retrocede el punto
-                return ('INTEGER', token)
+                token += '.'
+                return ('ERROR', token)
         if char is not None:
             ungetChar()
         return ('INTEGER', token)

@@ -162,12 +162,15 @@ class MainWindow(QMainWindow):
             lines = []
             errors = []
             for tipo, valor in tokens:
+                if tipo == 'ERROR':
+                    errors.append(f"Token no reconocido: {valor}")
+                    continue
+                if tipo == 'COMMENT':
+                    continue
                 if tipo in ('OPERATOR', 'DELIMITER'):
                     lines.append(valor)
                 else:
                     lines.append(f"{tipo}   {valor}")
-                if tipo == 'ERROR':
-                    errors.append(f"Token no reconocido: {valor}")
 
             self.output_panel.lexico_output.setPlainText("\n".join(lines))
 

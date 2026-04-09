@@ -2,6 +2,8 @@ from PySide6.QtWidgets import QPlainTextEdit, QWidget, QTextEdit
 from PySide6.QtGui import QColor, QPainter, QTextFormat, QTextCursor
 from PySide6.QtCore import Qt, QRect, QSize, Signal
 
+from editor.syntax_highlighter import LexicalHighlighter
+
 
 try:
     from ui.top_bar import COLORS
@@ -123,6 +125,9 @@ class CodeEditor(QPlainTextEdit):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         self.setStyleSheet(EDITOR_QSS)
+
+        # Resaltado de sintaxis basado en el analizador léxico
+        self.highlighter = LexicalHighlighter(self.document())
 
     # ── Gutter / números de línea ─────────────────────────────────────────────
 
