@@ -109,7 +109,9 @@ def getToken():
             char = getNextChar()
         if char is not None:
             ungetChar()
-        if token in ['if', 'else', 'while', 'for', 'return']:
+        if token in ['if', 'else', 'while', 'for', 'return',
+                     'main', 'end', 'int', 'float', 'cin', 'cout',
+                     'do', 'then', 'real', 'until']:
             return ('KEYWORD', token)
         return ('IDENTIFIER', token)
 
