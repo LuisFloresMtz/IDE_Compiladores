@@ -40,13 +40,47 @@ class LexicalHighlighter(QSyntaxHighlighter):
         return formats
 
     def highlightBlock(self, text: str) -> None:
-        if not text:
+        comment_fmt = self.formats['COMMENT']
+        in_comment = self.previousBlockState() == 1
+        offset = 0
+
+        # Si venimos de un /* abierto en un bloque anterior, pintar
+        # hasta el cierre */ (o toda la línea si sigue sin cerrar).
+        if in_comment:
+            close = text.find('*/')
+            if close == -1:
+                self.setFormat(0, len(text), comment_fmt)
+                self.setCurrentBlockState(1)
+                return
+            close_end = close + 2
+            self.setFormat(0, close_end, comment_fmt)
+            offset = close_end
+
+        remainder = text[offset:]
+        if not remainder:
+            self.setCurrentBlockState(0)
             return
+
         try:
-            tokens = tokenize_with_positions(text)
+            tokens = tokenize_with_positions(remainder)
         except Exception:
+            self.setCurrentBlockState(0)
             return
-        for tok_type, _value, start, end in tokens:
+
+        carry = False
+        for tok_type, value, start, end in tokens:
+            # Un ERROR al final de la línea que empieza con "/*" es un
+            # comentario multilínea que no cerró en esta línea → lo
+            # pintamos como COMMENT y mantenemos el estado para la
+            # siguiente línea.
+            if (tok_type == 'ERROR'
+                    and value.startswith('/*')
+                    and end == len(remainder)):
+                self.setFormat(offset + start, end - start, comment_fmt)
+                carry = True
+                continue
             fmt = self.formats.get(tok_type)
             if fmt is not None:
-                self.setFormat(start, end - start, fmt)
+                self.setFormat(offset + start, end - start, fmt)
+
+        self.setCurrentBlockState(1 if carry else 0)

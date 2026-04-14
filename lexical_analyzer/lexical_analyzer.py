@@ -111,7 +111,7 @@ def getToken():
             ungetChar()
         if token in ['if', 'else', 'while', 'for', 'return',
                      'main', 'end', 'int', 'float', 'cin', 'cout',
-                     'do', 'then', 'real', 'until']:
+                     'do', 'then', 'real', 'until', 'switch', 'case']:
             return ('KEYWORD', token)
         return ('IDENTIFIER', token)
 
@@ -141,17 +141,34 @@ def getToken():
             ungetChar()
         return ('INTEGER', token)
 
-    # Entrada CADENA
+    # Entrada CADENA (comillas dobles)
     elif char == '"':
         token += char
         char = getNextChar()
-        while char is not None and char != '"':
+        while char is not None and char != '"' and char != '\n':
             token += char
             char = getNextChar()
         if char == '"':
             token += char
             return ('STRING_LITERAL', token)
-        return ('ERROR', token)   # cadena sin cerrar
+        # Cadena sin cerrar: no consumir el salto de línea
+        if char == '\n':
+            ungetChar()
+        return ('ERROR', token)
+
+    # Entrada CARÁCTER (comilla simple)
+    elif char == "'":
+        token += char
+        char = getNextChar()
+        while char is not None and char != "'" and char != '\n':
+            token += char
+            char = getNextChar()
+        if char == "'":
+            token += char
+            return ('STRING_LITERAL', token)
+        if char == '\n':
+            ungetChar()
+        return ('ERROR', token)
 
     # Entrada IGUAL (= / ==)
     elif char == '=':
@@ -165,7 +182,7 @@ def getToken():
         return ('OPERATOR', token)
 
     # Entrada DELIMITADORES
-    elif char in [';', '(', ')', '{', '}', '[', ']', ':']:
+    elif char in [';', '(', ')', '{', '}', '[', ']', ':', ',']:
         return ('DELIMITER', char)
 
     # Entrada MENOS (- / --)
@@ -257,6 +274,28 @@ def getToken():
             if char is not None:
                 ungetChar()
             return ('OPERATOR', token)
+
+    # Entrada AND lógico (&&)
+    elif char == '&':
+        token += char
+        char = getNextChar()
+        if char == '&':
+            token += char
+            return ('OPERATOR', token)
+        if char is not None:
+            ungetChar()
+        return ('ERROR', token)
+
+    # Entrada OR lógico (||)
+    elif char == '|':
+        token += char
+        char = getNextChar()
+        if char == '|':
+            token += char
+            return ('OPERATOR', token)
+        if char is not None:
+            ungetChar()
+        return ('ERROR', token)
 
     else:
         return ('ERROR', char)

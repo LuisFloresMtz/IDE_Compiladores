@@ -7,7 +7,7 @@ from ui.sidebar import FileExplorer
 from ui.top_bar import create_top_bar, COLORS
 from ui.menu_bar import create_menu_bar
 from ui.tool_bar import create_toolbar
-from lexical_analyzer.lexical_analyzer import tokenize
+from lexical_analyzer.lexical_analyzer import tokenize_with_positions
 
 MAIN_STYLE = f"""
 QMainWindow {{
@@ -152,7 +152,7 @@ class MainWindow(QMainWindow):
                 return
 
             source = editor.toPlainText()
-            tokens = tokenize(source)
+            tokens = tokenize_with_positions(source)
 
             if not tokens:
                 self.output_panel.lexico_output.setPlainText("(sin tokens)")
@@ -161,9 +161,15 @@ class MainWindow(QMainWindow):
 
             lines = []
             errors = []
-            for tipo, valor in tokens:
+            for tipo, valor, start, _end in tokens:
                 if tipo == 'ERROR':
-                    errors.append(f"Token no reconocido: {valor}")
+                    line_no = source.count('\n', 0, start) + 1
+                    last_nl = source.rfind('\n', 0, start)
+                    col_no = start - last_nl if last_nl != -1 else start + 1
+                    errors.append(
+                        f"Línea {line_no}, columna {col_no}: "
+                        f"token no reconocido «{valor}»"
+                    )
                     continue
                 if tipo == 'COMMENT':
                     continue
