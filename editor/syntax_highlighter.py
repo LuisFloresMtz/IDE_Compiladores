@@ -11,10 +11,30 @@ TOKEN_COLORS = {
     'FLOAT':          "#ffb86c",  # naranja brillante
     'STRING_LITERAL': "#50fa7b",  # verde neón
     'COMMENT':        "#9ca3af",  # gris claro
-    'OPERATOR':       "#8be9fd",  # cian brillante
+    'OP_ARITH':       "#8be9fd",  # cian brillante  (+, -, *, /, %, ^, ++, --)
+    'OP_REL':         "#bd93f9",  # violeta         (<, >, <=, >=, ==, !=)
+    'OP_LOGIC':       "#ff92df",  # magenta         (&&, ||, !)
+    'OP_ASSIGN':      "#f8f8f2",  # blanco          (=)
     'DELIMITER':      "#f1fa8c",  # amarillo brillante
     'ERROR':          "#ff5555",  # rojo saturado
 }
+
+ARITH_OPS = {'+', '-', '*', '/', '%', '^', '++', '--'}
+REL_OPS = {'<', '>', '<=', '>=', '==', '!='}
+LOGIC_OPS = {'&&', '||', '!'}
+ASSIGN_OPS = {'='}
+
+
+def _operator_format_key(value: str) -> str:
+    if value in ARITH_OPS:
+        return 'OP_ARITH'
+    if value in REL_OPS:
+        return 'OP_REL'
+    if value in LOGIC_OPS:
+        return 'OP_LOGIC'
+    if value in ASSIGN_OPS:
+        return 'OP_ASSIGN'
+    return 'OP_ARITH'
 
 
 class LexicalHighlighter(QSyntaxHighlighter):
@@ -79,7 +99,10 @@ class LexicalHighlighter(QSyntaxHighlighter):
                 self.setFormat(offset + start, end - start, comment_fmt)
                 carry = True
                 continue
-            fmt = self.formats.get(tok_type)
+            if tok_type == 'OPERATOR':
+                fmt = self.formats.get(_operator_format_key(value))
+            else:
+                fmt = self.formats.get(tok_type)
             if fmt is not None:
                 self.setFormat(offset + start, end - start, fmt)
 
