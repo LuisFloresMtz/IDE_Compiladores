@@ -9,6 +9,15 @@ from ui.menu_bar import create_menu_bar
 from ui.tool_bar import create_toolbar
 from lexical_analyzer.lexical_analyzer import tokenize_with_positions, operator_category
 
+TIPO_ES = {
+    'KEYWORD':        'PALABRA RESERVADA',
+    'IDENTIFIER':     'IDENTIFICADOR',
+    'INTEGER':        'ENTERO',
+    'FLOAT':          'REAL',
+    'STRING_LITERAL': 'CADENA',
+    'DELIMITER':      'DELIMITADOR',
+}
+
 MAIN_STYLE = f"""
 QMainWindow {{
     background-color: {COLORS['bg_dark']};
@@ -175,9 +184,9 @@ class MainWindow(QMainWindow):
                     continue
                 if tipo == 'OPERATOR':
                     categoria = operator_category(valor)
-                    lines.append(f"Línea {line_no:<3d}  {categoria:15s}  {valor}")
                 else:
-                    lines.append(f"Línea {line_no:<3d}  {tipo:15s}  {valor}")
+                    categoria = TIPO_ES.get(tipo, tipo)
+                lines.append(f"Línea {line_no:<3d}  {categoria:20s}  {valor}")
 
             self.output_panel.lexico_output.setPlainText("\n".join(lines))
 

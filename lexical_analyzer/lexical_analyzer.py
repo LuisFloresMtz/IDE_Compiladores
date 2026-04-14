@@ -10,30 +10,30 @@ tokenTypes = {
 
 # Categoría de cada operador agrupado por tipo.
 OPERATOR_CATEGORY = {
-    '=':  'ASIGNACION',
-    '==': 'RELACIONAL',
-    '!=': 'RELACIONAL',
-    '<':  'RELACIONAL',
-    '<=': 'RELACIONAL',
-    '>':  'RELACIONAL',
-    '>=': 'RELACIONAL',
-    '!':  'LOGICO',
-    '&&': 'LOGICO',
-    '||': 'LOGICO',
-    '+':  'ARITMETICO',
-    '++': 'ARITMETICO',
-    '-':  'ARITMETICO',
-    '--': 'ARITMETICO',
-    '*':  'ARITMETICO',
-    '/':  'ARITMETICO',
-    '%':  'ARITMETICO',
-    '^':  'ARITMETICO',
+    '=':  'OPERADOR ASIGNACION',
+    '==': 'OPERADOR RELACIONAL',
+    '!=': 'OPERADOR RELACIONAL',
+    '<':  'OPERADOR RELACIONAL',
+    '<=': 'OPERADOR RELACIONAL',
+    '>':  'OPERADOR RELACIONAL',
+    '>=': 'OPERADOR RELACIONAL',
+    '!':  'OPERADOR LOGICO',
+    '&&': 'OPERADOR LOGICO',
+    '||': 'OPERADOR LOGICO',
+    '+':  'OPERADOR ARITMETICO',
+    '++': 'OPERADOR ARITMETICO',
+    '-':  'OPERADOR ARITMETICO',
+    '--': 'OPERADOR ARITMETICO',
+    '*':  'OPERADOR ARITMETICO',
+    '/':  'OPERADOR ARITMETICO',
+    '%':  'OPERADOR ARITMETICO',
+    '^':  'OPERADOR ARITMETICO',
 }
 
 
 def operator_category(value: str) -> str:
-    """Devuelve la categoría del operador (ARITMETICO, RELACIONAL, LOGICO, ASIGNACION)."""
-    return OPERATOR_CATEGORY.get(value, 'OPERATOR')
+    """Devuelve la categoría del operador (p. ej. '+' → 'OPERADOR ARITMETICO')."""
+    return OPERATOR_CATEGORY.get(value, 'OPERADOR')
 
 line = ""
 linepos = 0
