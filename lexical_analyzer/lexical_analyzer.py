@@ -5,9 +5,35 @@ tokenTypes = {
     'FLOAT': 4,
     'STRING_LITERAL': 5,
     'COMMENT': 6,
-    'WHITESPACE': 7,
-    'ERROR': 8
+    'ERROR': 7
 }
+
+# Categoría específica para cada operador (útil para mostrar en la terminal).
+OPERATOR_CATEGORY = {
+    '=':  'ASIGNACION',
+    '==': 'IGUAL',
+    '!=': 'DIFERENTE',
+    '!':  'NEGACION',
+    '<':  'MENOR',
+    '<=': 'MENOR_IGUAL',
+    '>':  'MAYOR',
+    '>=': 'MAYOR_IGUAL',
+    '+':  'SUMA',
+    '++': 'INCREMENTO',
+    '-':  'RESTA',
+    '--': 'DECREMENTO',
+    '*':  'MULTIPLICACION',
+    '/':  'DIVISION',
+    '%':  'MODULO',
+    '^':  'POTENCIA',
+    '&&': 'AND',
+    '||': 'OR',
+}
+
+
+def operator_category(value: str) -> str:
+    """Devuelve la categoría específica de un operador (p. ej. '+' → 'SUMA')."""
+    return OPERATOR_CATEGORY.get(value, 'OPERATOR')
 
 line = ""
 linepos = 0
@@ -77,7 +103,8 @@ def tokenize_with_positions(source):
     while True:
         # Saltar whitespace aquí para poder capturar el offset inicial
         # del siguiente token antes de que getToken consuma caracteres.
-        while _source_pos < len(_source) and _source[_source_pos].isspace():
+        while (_source_pos < len(_source)
+               and _source[_source_pos] in (' ', '\t', '\n', '\r')):
             _source_pos += 1
         if _source_pos >= len(_source):
             break
@@ -96,7 +123,9 @@ def getToken():
     token = ""
     char = getNextChar()
 
-    while char is not None and char.isspace():
+    # Ignorar espacios, tabuladores y saltos de línea.
+    while char is not None and (char == ' ' or char == '\t'
+                                or char == '\n' or char == '\r'):
         char = getNextChar()
 
     if char is None:
@@ -302,9 +331,13 @@ def getToken():
 
 
 if __name__ == '__main__':
-    print("Ingrese código (Ctrl+D o Ctrl+Z para terminar):")
-    while not EOF_flag:
-        tok = getToken()
-        if tok is None:
-            break
-        print(f"  {tok[0]:20s} → {tok[1]!r}")
+    import sys
+    source = sys.stdin.read()
+    tokens = tokenize_with_positions(source)
+    for tipo, valor, start, _end in tokens:
+        line_no = source.count('\n', 0, start) + 1
+        if tipo == 'OPERATOR':
+            categoria = operator_category(valor)
+            print(f"  L{line_no:<3d} {categoria:15s} → {valor!r}")
+        else:
+            print(f"  L{line_no:<3d} {tipo:15s} → {valor!r}")

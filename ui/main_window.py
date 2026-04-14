@@ -7,7 +7,7 @@ from ui.sidebar import FileExplorer
 from ui.top_bar import create_top_bar, COLORS
 from ui.menu_bar import create_menu_bar
 from ui.tool_bar import create_toolbar
-from lexical_analyzer.lexical_analyzer import tokenize_with_positions
+from lexical_analyzer.lexical_analyzer import tokenize_with_positions, operator_category
 
 MAIN_STYLE = f"""
 QMainWindow {{
@@ -162,8 +162,8 @@ class MainWindow(QMainWindow):
             lines = []
             errors = []
             for tipo, valor, start, _end in tokens:
+                line_no = source.count('\n', 0, start) + 1
                 if tipo == 'ERROR':
-                    line_no = source.count('\n', 0, start) + 1
                     last_nl = source.rfind('\n', 0, start)
                     col_no = start - last_nl if last_nl != -1 else start + 1
                     errors.append(
@@ -173,10 +173,11 @@ class MainWindow(QMainWindow):
                     continue
                 if tipo == 'COMMENT':
                     continue
-                if tipo in ('OPERATOR', 'DELIMITER'):
-                    lines.append(valor)
+                if tipo == 'OPERATOR':
+                    categoria = operator_category(valor)
+                    lines.append(f"Línea {line_no:<3d}  {categoria:15s}  {valor}")
                 else:
-                    lines.append(f"{tipo}   {valor}")
+                    lines.append(f"Línea {line_no:<3d}  {tipo:15s}  {valor}")
 
             self.output_panel.lexico_output.setPlainText("\n".join(lines))
 
