@@ -11,10 +11,10 @@ TOKEN_COLORS = {
     'FLOAT':          "#ffb86c",  # naranja brillante
     'STRING_LITERAL': "#50fa7b",  # verde neón
     'COMMENT':        "#9ca3af",  # gris claro
-    'OP_ARITH':       "#8be9fd",  # cian brillante  (+, -, *, /, %, ^, ++, --)
-    'OP_REL':         "#bd93f9",  # violeta         (<, >, <=, >=, ==, !=, &&, ||, !)
-    'OP_LOGIC':       "#bd93f9",  # violeta         (mismo color que relacionales)
-    'OP_ASSIGN':      "#f8f8f2",  # blanco          (=)
+    'OP_ARITH':       "#8be9fd",  # aritméticos  (+, -, *, /, %, ^, ++, --)
+    'OP_REL':         "#bd93f9",  # relacionales (<, >, <=, >=, ==, !=)
+    'OP_LOGIC':       "#bd93f9",  # lógicos      (&&, ||, !)
+    'OP_ASSIGN':      "#f8f8f2",  # asignación   (=)
     'DELIMITER':      "#f1fa8c",  # amarillo brillante
     'ERROR':          "#ff5555",  # rojo saturado
 }

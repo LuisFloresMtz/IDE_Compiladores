@@ -8,31 +8,31 @@ tokenTypes = {
     'ERROR': 7
 }
 
-# Categoría específica para cada operador (útil para mostrar en la terminal).
+# Categoría de cada operador agrupado por tipo.
 OPERATOR_CATEGORY = {
     '=':  'ASIGNACION',
-    '==': 'IGUAL',
-    '!=': 'DIFERENTE',
-    '!':  'NEGACION',
-    '<':  'MENOR',
-    '<=': 'MENOR_IGUAL',
-    '>':  'MAYOR',
-    '>=': 'MAYOR_IGUAL',
-    '+':  'SUMA',
-    '++': 'INCREMENTO',
-    '-':  'RESTA',
-    '--': 'DECREMENTO',
-    '*':  'MULTIPLICACION',
-    '/':  'DIVISION',
-    '%':  'MODULO',
-    '^':  'POTENCIA',
-    '&&': 'AND',
-    '||': 'OR',
+    '==': 'RELACIONAL',
+    '!=': 'RELACIONAL',
+    '<':  'RELACIONAL',
+    '<=': 'RELACIONAL',
+    '>':  'RELACIONAL',
+    '>=': 'RELACIONAL',
+    '!':  'LOGICO',
+    '&&': 'LOGICO',
+    '||': 'LOGICO',
+    '+':  'ARITMETICO',
+    '++': 'ARITMETICO',
+    '-':  'ARITMETICO',
+    '--': 'ARITMETICO',
+    '*':  'ARITMETICO',
+    '/':  'ARITMETICO',
+    '%':  'ARITMETICO',
+    '^':  'ARITMETICO',
 }
 
 
 def operator_category(value: str) -> str:
-    """Devuelve la categoría específica de un operador (p. ej. '+' → 'SUMA')."""
+    """Devuelve la categoría del operador (ARITMETICO, RELACIONAL, LOGICO, ASIGNACION)."""
     return OPERATOR_CATEGORY.get(value, 'OPERATOR')
 
 line = ""
