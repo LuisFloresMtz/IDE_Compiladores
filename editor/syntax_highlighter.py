@@ -12,8 +12,8 @@ TOKEN_COLORS = {
     'STRING_LITERAL': "#50fa7b",  # verde neón
     'COMMENT':        "#9ca3af",  # gris claro
     'OP_ARITH':       "#8be9fd",  # cian brillante  (+, -, *, /, %, ^, ++, --)
-    'OP_REL':         "#bd93f9",  # violeta         (<, >, <=, >=, ==, !=)
-    'OP_LOGIC':       "#ff92df",  # magenta         (&&, ||, !)
+    'OP_REL':         "#bd93f9",  # violeta         (<, >, <=, >=, ==, !=, &&, ||, !)
+    'OP_LOGIC':       "#bd93f9",  # violeta         (mismo color que relacionales)
     'OP_ASSIGN':      "#f8f8f2",  # blanco          (=)
     'DELIMITER':      "#f1fa8c",  # amarillo brillante
     'ERROR':          "#ff5555",  # rojo saturado
