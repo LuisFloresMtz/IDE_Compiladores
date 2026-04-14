@@ -76,6 +76,38 @@ def ungetChar():
         linepos -= 1
 
 
+def _try_match_next(expected):
+    """Salta espacios, tabs y saltos de línea y verifica si el siguiente
+    carácter coincide con `expected`. Si coincide, lo consume junto con el
+    whitespace intermedio y devuelve True. Si no coincide, restaura el estado
+    original y devuelve False.
+
+    Gracias a este helper, un par como «=  =» (o incluso separado por saltos
+    de línea) se reconoce como el operador «==»."""
+    global _source_pos, linepos, line, EOF_flag
+    if _source is not None:
+        saved = _source_pos
+        while (_source_pos < len(_source)
+               and _source[_source_pos] in (' ', '\t', '\n', '\r')):
+            _source_pos += 1
+        if _source_pos < len(_source) and _source[_source_pos] == expected:
+            _source_pos += 1
+            return True
+        _source_pos = saved
+        return False
+    # Modo interactivo: no intentamos restaurar estado multilínea, así que
+    # sólo miramos el siguiente carácter de la línea actual.
+    saved_linepos = linepos
+    char = getNextChar()
+    while char is not None and char in (' ', '\t', '\r'):
+        char = getNextChar()
+    if char == expected:
+        return True
+    linepos = saved_linepos
+    EOF_flag = False
+    return False
+
+
 def tokenize(source):
     global _source, _source_pos, EOF_flag
     _source = source
@@ -199,78 +231,60 @@ def getToken():
             ungetChar()
         return ('ERROR', token)
 
-    # Entrada IGUAL (= / ==)
+    # Entrada IGUAL (= / ==). Acepta whitespace entre los dos «=».
     elif char == '=':
         token += char
-        char = getNextChar()
-        if char == '=':
-            token += char
+        if _try_match_next('='):
+            token += '='
             return ('OPERATOR', token)
-        if char is not None:
-            ungetChar()
         return ('OPERATOR', token)
 
     # Entrada DELIMITADORES
     elif char in [';', '(', ')', '{', '}', '[', ']', ':', ',']:
         return ('DELIMITER', char)
 
-    # Entrada MENOS (- / --)
+    # Entrada MENOS (- / --). Acepta whitespace entre los dos «-».
     elif char == '-':
         token += char
-        char = getNextChar()
-        if char == '-':
-            token += char
+        if _try_match_next('-'):
+            token += '-'
             return ('OPERATOR', token)
-        if char is not None:
-            ungetChar()
         return ('OPERATOR', token)
 
-    # Entrada MÁS (+ / ++)
+    # Entrada MÁS (+ / ++). Acepta whitespace entre los dos «+».
     elif char == '+':
         token += char
-        char = getNextChar()
-        if char == '+':
-            token += char
+        if _try_match_next('+'):
+            token += '+'
             return ('OPERATOR', token)
-        if char is not None:
-            ungetChar()
         return ('OPERATOR', token)
 
-    # Entrada MENOR (< / <=)
+    # Entrada MENOR (< / <=). Acepta whitespace entre «<» y «=».
     elif char == '<':
         token += char
-        char = getNextChar()
-        if char == '=':
-            token += char
+        if _try_match_next('='):
+            token += '='
             return ('OPERATOR', token)
-        if char is not None:
-            ungetChar()
         return ('OPERATOR', token)
 
-    # Entrada MAYOR (> / >=)
+    # Entrada MAYOR (> / >=). Acepta whitespace entre «>» y «=».
     elif char == '>':
         token += char
-        char = getNextChar()
-        if char == '=':
-            token += char
+        if _try_match_next('='):
+            token += '='
             return ('OPERATOR', token)
-        if char is not None:
-            ungetChar()
         return ('OPERATOR', token)
 
     # Entrada OPERADORES
     elif char in ['*', '%', '^']:
         return ('OPERATOR', char)
 
-    # Entrada NEGACION (! / !=)
+    # Entrada NEGACION (! / !=). Acepta whitespace entre «!» y «=».
     elif char == '!':
         token += char
-        char = getNextChar()
-        if char == '=':
-            token += char
+        if _try_match_next('='):
+            token += '='
             return ('OPERATOR', token)
-        if char is not None:
-            ungetChar()
         return ('OPERATOR', token)
 
     # Entrada DIVISION / COMENTARIOS
@@ -304,26 +318,20 @@ def getToken():
                 ungetChar()
             return ('OPERATOR', token)
 
-    # Entrada AND lógico (&&)
+    # Entrada AND lógico (&&). Acepta whitespace entre los dos «&».
     elif char == '&':
         token += char
-        char = getNextChar()
-        if char == '&':
-            token += char
+        if _try_match_next('&'):
+            token += '&'
             return ('OPERATOR', token)
-        if char is not None:
-            ungetChar()
         return ('ERROR', token)
 
-    # Entrada OR lógico (||)
+    # Entrada OR lógico (||). Acepta whitespace entre los dos «|».
     elif char == '|':
         token += char
-        char = getNextChar()
-        if char == '|':
-            token += char
+        if _try_match_next('|'):
+            token += '|'
             return ('OPERATOR', token)
-        if char is not None:
-            ungetChar()
         return ('ERROR', token)
 
     else:
