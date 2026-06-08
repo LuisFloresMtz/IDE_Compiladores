@@ -28,6 +28,8 @@ OPERATOR_CATEGORY = {
     '/':  'OPERADOR ARITMETICO',
     '%':  'OPERADOR ARITMETICO',
     '^':  'OPERADOR ARITMETICO',
+    '>>': 'OPERADOR ENTRADA',
+    '<<': 'OPERADOR SALIDA',
 }
 
 
@@ -151,6 +153,20 @@ def tokenize_with_positions(source):
     return tokens
 
 
+def tokenize_with_lines(source):
+    """Como tokenize_with_positions(), pero devuelve (tipo, valor, linea,
+    columna) en lugar de offsets. Pensado para el analizador sintáctico, que
+    necesita reportar errores con línea y columna. Convierte la categoría de
+    operadores genérica 'OPERATOR' tal cual (el parser distingue por valor)."""
+    result = []
+    for tipo, valor, start, _end in tokenize_with_positions(source):
+        line_no = source.count('\n', 0, start) + 1
+        last_nl = source.rfind('\n', 0, start)
+        col_no = start - last_nl if last_nl != -1 else start + 1
+        result.append((tipo, valor, line_no, col_no))
+    return result
+
+
 def getToken():
     token = ""
     char = getNextChar()
@@ -171,8 +187,9 @@ def getToken():
         if char is not None:
             ungetChar()
         if token in ['if', 'else', 'while', 'for', 'return',
-                     'main', 'end', 'int', 'float', 'cin', 'cout',
-                     'do', 'then', 'real', 'until', 'switch', 'case']:
+                     'main', 'end', 'int', 'float', 'bool', 'cin', 'cout',
+                     'do', 'then', 'real', 'until', 'switch', 'case',
+                     'true', 'false']:
             return ('KEYWORD', token)
         return ('IDENTIFIER', token)
 
@@ -259,19 +276,25 @@ def getToken():
             return ('OPERATOR', token)
         return ('OPERATOR', token)
 
-    # Entrada MENOR (< / <=). Acepta whitespace entre «<» y «=».
+    # Entrada MENOR (< / <= / <<). Acepta whitespace entre los símbolos.
     elif char == '<':
         token += char
         if _try_match_next('='):
             token += '='
             return ('OPERATOR', token)
+        if _try_match_next('<'):
+            token += '<'
+            return ('OPERATOR', token)
         return ('OPERATOR', token)
 
-    # Entrada MAYOR (> / >=). Acepta whitespace entre «>» y «=».
+    # Entrada MAYOR (> / >= / >>). Acepta whitespace entre los símbolos.
     elif char == '>':
         token += char
         if _try_match_next('='):
             token += '='
+            return ('OPERATOR', token)
+        if _try_match_next('>'):
+            token += '>'
             return ('OPERATOR', token)
         return ('OPERATOR', token)
 

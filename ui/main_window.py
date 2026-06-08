@@ -7,7 +7,11 @@ from ui.sidebar import FileExplorer
 from ui.top_bar import create_top_bar, COLORS
 from ui.menu_bar import create_menu_bar
 from ui.tool_bar import create_toolbar
-from lexical_analyzer.lexical_analyzer import tokenize_with_positions, operator_category
+from lexical_analyzer.lexical_analyzer import (
+    tokenize_with_positions, tokenize_with_lines, operator_category,
+)
+from syntactic_analyzer.parser import parse_tokens
+from syntactic_analyzer.tree_view import SyntaxTreeWindow
 
 TIPO_ES = {
     'KEYWORD':        'PALABRA RESERVADA',
@@ -202,7 +206,76 @@ class MainWindow(QMainWindow):
             self._show_output(0)
 
     def run_sintactico(self):
-        self.output_panel.write(self.output_panel.sintactico_output, "▶ Análisis Sintáctico iniciado…", "info")
+        import traceback
+        panel = self.output_panel
+        try:
+            editor = self.tabeditor.current_editor()
+            if not editor:
+                panel.sintactico_output.setPlainText("No hay ningún archivo abierto.")
+                self._show_output(1)
+                return
+
+            source = editor.toPlainText()
+            tokens = tokenize_with_lines(source)
+
+            # ── 1) Errores léxicos: deben eliminarse antes de validar sintaxis ─
+            lexicos = [
+                f"Léxico — Línea {ln}, columna {col}: token no reconocido «{val}»"
+                for tipo, val, ln, col in tokens if tipo == 'ERROR'
+            ]
+            # Stream para el parser: sin comentarios ni tokens de error.
+            stream = [t for t in tokens if t[0] not in ('COMMENT', 'ERROR')]
+
+            # ── 2) Análisis sintáctico ────────────────────────────────────────
+            ast, sintacticos = parse_tokens(stream)
+
+            # ── 3) Salida en consola Sintáctico ──────────────────────────────
+            panel.sintactico_output.clear()
+            panel.write(panel.sintactico_output, "▶ Análisis Sintáctico", "info")
+            if lexicos:
+                panel.write(panel.sintactico_output,
+                            f"⚠ {len(lexicos)} error(es) léxico(s): corrígelos para una validación completa.",
+                            "warning")
+            self._print_ast(ast, panel.sintactico_output)
+
+            # ── 4) Consola Errores ───────────────────────────────────────────
+            err_lines = list(lexicos)
+            err_lines += [
+                f"Sintáctico — Línea {ln}, columna {col}: {msg}"
+                for msg, ln, col in sintacticos
+            ]
+            if err_lines:
+                panel.errores_output.setPlainText("\n".join(err_lines))
+            else:
+                panel.errores_output.setPlainText("Sin errores léxicos ni sintácticos.")
+
+            if sintacticos:
+                panel.write(panel.sintactico_output,
+                            f"✗ {len(sintacticos)} error(es) sintáctico(s). Ver pestaña Errores.",
+                            "error")
+            else:
+                panel.write(panel.sintactico_output, "✓ Análisis sintáctico correcto.", "success")
+
+            # ── 5) Ventana del árbol (gráfica, colapsable, auto-expandida) ────
+            self.tree_window = SyntaxTreeWindow(ast, n_errores=len(sintacticos), parent=self)
+            self.tree_window.show()
+            self.tree_window.raise_()
+
+            self._show_output(1)
+
+        except Exception:
+            panel.sintactico_output.setPlainText(traceback.format_exc())
+            self._show_output(1)
+
+    def _print_ast(self, node, console, depth=0):
+        """Vuelca el AST en texto indentado en la consola (respaldo del árbol gráfico)."""
+        if node is None:
+            return
+        prefix = "  " * depth
+        suffix = f"  (L{node.line}, C{node.col})" if node.line is not None else ""
+        self.output_panel.write(console, f"{prefix}{node.label()}{suffix}", "dim" if depth else "accent")
+        for child in node.children:
+            self._print_ast(child, console, depth + 1)
 
     def run_semantico(self):
         self.output_panel.write(self.output_panel.semantico_output, "▶ Análisis Semántico iniciado…", "info")
