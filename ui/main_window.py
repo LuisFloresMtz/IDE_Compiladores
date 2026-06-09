@@ -11,7 +11,7 @@ from lexical_analyzer.lexical_analyzer import (
     tokenize_with_positions, tokenize_with_lines, operator_category,
 )
 from syntactic_analyzer.parser import parse_tokens
-from syntactic_analyzer.tree_view import SyntaxTreeWindow
+from syntactic_analyzer.tree_view import SyntaxTreePanel
 
 TIPO_ES = {
     'KEYWORD':        'PALABRA RESERVADA',
@@ -70,6 +70,12 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.sidebar)
         self.resizeDocks([self.sidebar], [220], Qt.Orientation.Horizontal)
         self.sidebar.tree.doubleClicked.connect(self.open_file_from_sidebar)
+
+        # ── Panel derecho (árbol sintáctico) ──────────────────────────────────
+        self.tree_panel = SyntaxTreePanel(self)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.tree_panel)
+        self.resizeDocks([self.tree_panel], [360], Qt.Orientation.Horizontal)
+        self.tree_panel.hide()   # oculto hasta el primer análisis sintáctico
 
         # ── Status bar ────────────────────────────────────────────────────────
         self.cursor_label = QLabel("Ln 1, Col 1")
@@ -256,10 +262,10 @@ class MainWindow(QMainWindow):
             else:
                 panel.write(panel.sintactico_output, "✓ Análisis sintáctico correcto.", "success")
 
-            # ── 5) Ventana del árbol (gráfica, colapsable, auto-expandida) ────
-            self.tree_window = SyntaxTreeWindow(ast, n_errores=len(sintacticos), parent=self)
-            self.tree_window.show()
-            self.tree_window.raise_()
+            # ── 5) Panel derecho del árbol (gráfico, colapsable, auto-expandido) ─
+            self.tree_panel.set_ast(ast, n_errores=len(sintacticos))
+            self.tree_panel.show()
+            self.tree_panel.raise_()
 
             self._show_output(1)
 

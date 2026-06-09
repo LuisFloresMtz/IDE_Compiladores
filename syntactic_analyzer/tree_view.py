@@ -6,7 +6,7 @@ Muestra el AST con un QTreeWidget: estructura tipo carpeta, colapsable
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
-    QLabel, QPushButton,
+    QLabel, QPushButton, QDockWidget,
 )
 from PySide6.QtCore import Qt
 
@@ -104,6 +104,91 @@ class SyntaxTreeWindow(QWidget):
         if ast_root is not None:
             self._populate(ast_root, self.tree.invisibleRootItem())
         self.tree.expandAll()   # expandido automáticamente al abrir
+
+    def _populate(self, node, parent_item):
+        text = node.label()
+        if node.line is not None:
+            text += f"   (L{node.line}, C{node.col})"
+        item = QTreeWidgetItem([text])
+        parent_item.addChild(item)
+        for child in node.children:
+            self._populate(child, item)
+
+
+class SyntaxTreePanel(QDockWidget):
+    """Panel acoplable (lado derecho del IDE) que muestra el AST.
+
+    Reemplaza la ventana independiente: el árbol vive dentro del IDE.
+    Llamar `set_ast(ast_root, n_errores)` para poblarlo tras cada análisis.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # Sin title bar nativo (estética consistente con el panel inferior).
+        self.setTitleBarWidget(QWidget())
+        self.setAllowedAreas(
+            Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
+        )
+        self.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+
+        root = QWidget()
+        root.setStyleSheet(_TREE_STYLE)
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        titulo = QLabel("Árbol Sintáctico Abstracto")
+        titulo.setObjectName("titulo")
+        layout.addWidget(titulo)
+
+        # ── Controles colapsar/expandir + estado ──────────────────────────────
+        botones = QHBoxLayout()
+        botones.setSpacing(6)
+        btn_exp = QPushButton("Expandir todo")
+        btn_col = QPushButton("Contraer todo")
+        botones.addWidget(btn_exp)
+        botones.addWidget(btn_col)
+        botones.addStretch()
+        layout.addLayout(botones)
+
+        self.estado = QLabel("")
+        layout.addWidget(self.estado)
+
+        # ── Árbol ─────────────────────────────────────────────────────────────
+        self.tree = QTreeWidget()
+        self.tree.setHeaderHidden(True)
+        self.tree.setAnimated(True)
+        self.tree.setIndentation(22)
+        layout.addWidget(self.tree)
+
+        btn_exp.clicked.connect(self.tree.expandAll)
+        btn_col.clicked.connect(self.tree.collapseAll)
+
+        self.setWidget(root)
+
+    def set_ast(self, ast_root, n_errores=0):
+        self.tree.clear()
+
+        if n_errores:
+            self.estado.setText(
+                f"⚠ {n_errores} error(es) sintáctico(s) — ver pestaña Errores"
+            )
+            self.estado.setStyleSheet(
+                "color: #f38ba8; font-family: 'Segoe UI'; font-size: 12px;"
+            )
+        else:
+            self.estado.setText("✓ Sin errores sintácticos")
+            self.estado.setStyleSheet(
+                "color: #a6e3a1; font-family: 'Segoe UI'; font-size: 12px;"
+            )
+
+        if ast_root is not None:
+            self._populate(ast_root, self.tree.invisibleRootItem())
+        self.tree.expandAll()
 
     def _populate(self, node, parent_item):
         text = node.label()
