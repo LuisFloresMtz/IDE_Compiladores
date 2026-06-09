@@ -262,8 +262,16 @@ class MainWindow(QMainWindow):
             else:
                 panel.write(panel.sintactico_output, "✓ Análisis sintáctico correcto.", "success")
 
-            # ── 5) Panel derecho del árbol (gráfico, colapsable, auto-expandido) ─
-            self.tree_panel.set_ast(ast, n_errores=len(sintacticos))
+            # ── 5) Subrayado rojo de errores en el editor ────────────────────
+            markers = [
+                (ln, col, f"léxico: token no reconocido «{val}»")
+                for tipo, val, ln, col in tokens if tipo == 'ERROR'
+            ]
+            markers += [(ln, col, msg) for msg, ln, col in sintacticos]
+            editor.set_error_markers(markers)
+
+            # ── 6) Panel derecho del árbol (gráfico, colapsable, auto-expandido) ─
+            self.tree_panel.set_ast(ast, errores=sintacticos)
             self.tree_panel.show()
             self.tree_panel.raise_()
 

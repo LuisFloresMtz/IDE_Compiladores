@@ -21,31 +21,47 @@ Gramática (forma iterativa, recursión izquierda eliminada):
     tipo                → int | float | bool
     lista_sentencias    → sentencia*
     sentencia           → seleccion | iteracion | repeticion
-                        | sent_in | sent_out | asignacion
+                        | sent_in | sent_out | asignacion | incremento
     asignacion          → id = sent_expresion
+    incremento          → id (++ | --) ;
     sent_expresion      → expresion ; | ;
     seleccion           → if expresion then lista_sentencias
-                          [ else lista_sentencias ] end
-    iteracion           → while expresion lista_sentencias end
-    repeticion          → do lista_sentencias while expresion
+                          [ else lista_sentencias ] end ;
+    iteracion           → while expresion { lista_sentencias } ; | while expresion ;
+    repeticion          → do lista_sentencias while expresion ;
     sent_in             → cin >> id ;
     sent_out            → cout << salida
     salida              → cadena [ << expresion ] | expresion [ << cadena ]
 
-Precedencia (de menor a mayor) y asociatividad:
-    rel_op   (< <= > >= == !=)   no asociativo  (una sola comparación)
-    suma_op  (+ - ++ --)          izquierda
-    mult_op  (* / %)              izquierda
-    pot_op   (^)                  derecha
-    log_op   (! && ||)            prefijo (unario)
+Sub-gramática de expresiones (idéntica al PDF Fase 2). La asociatividad
+la fija la recursión por la izquierda de cada producción → TODOS los
+operadores binarios son asociativos por la IZQUIERDA. Se implementa de
+forma iterativa (bucle = plegado a la izquierda):
+
+    expresion           → expresion logic_op relacional | relacional     (izquierda)
+    logic_op            → && | ||                                        (binario)
+    relacional          → expresion_simple [ rel_op expresion_simple ]   (no asociativo)
+    rel_op              → < | <= | > | >= | == | !=
+    expresion_simple    → expresion_simple suma_op termino | termino     (izquierda)
+    suma_op             → + | -
+    termino             → termino mult_op factor | factor                (izquierda)
+    mult_op             → * | / | %
+    factor              → factor pot_op componente | componente          (izquierda)
+    pot_op              → ^
+    componente          → ( expresion ) | numero | id | bool | ! componente
+
+Precedencia (de MENOR a MAYOR): logic_op < rel_op < suma_op < mult_op < pot_op.
+&& y || son BINARIOS (precedencia más baja); ! es PREFIJO sobre componente.
 """
 
 # Conjuntos de operadores por categoría gramatical (se distinguen por valor).
 REL_OP   = {'<', '<=', '>', '>=', '==', '!='}
-SUMA_OP  = {'+', '-', '++', '--'}
+SUMA_OP  = {'+', '-'}
 MULT_OP  = {'*', '/', '%'}
 POT_OP   = {'^'}
-LOG_OP   = {'&&', '||', '!'}
+LOGIC_OP = {'&&', '||'}   # binarios, precedencia MÁS BAJA (a && b)
+NOT_OP   = {'!'}          # op_logico unario PREFIJO sobre componente
+INCR_OP  = {'++', '--'}   # postfijo: sentencia  (a++ ;  c-- ;)
 TIPOS    = {'int', 'float', 'bool'}
 # Palabras con las que puede comenzar una sentencia.
 SENT_START_KW = {'if', 'while', 'do', 'cin', 'cout'}
@@ -86,6 +102,7 @@ class Parser:
         self.tokens = list(tokens) + [('EOF', 'EOF', eof_line, eof_col)]
         self.pos = 0
         self.errors = []   # [(mensaje, linea, columna)]
+        self._stack = []   # nodos en construcción: el error se cuelga del actual
 
     # ── Acceso a tokens ────────────────────────────────────────────────────
     def peek(self):
@@ -106,10 +123,24 @@ class Parser:
     def _type(self):
         return self.peek()[0]
 
+    # ── Pila de construcción (para colgar errores en su sitio del AST) ──────
+    def _enter(self, node):
+        """Marca `node` como construcción actual; los errores se cuelgan de él."""
+        self._stack.append(node)
+        return node
+
+    def _leave(self, node):
+        self._stack.pop()
+        return node
+
     # ── Errores ─────────────────────────────────────────────────────────────
     def error(self, msg, tok=None):
         t = tok or self.peek()
         self.errors.append((msg, t[2], t[3]))
+        # Cuelga un nodo «error» del nodo que se está parseando ahora mismo,
+        # de modo que aparezca inline en el árbol, no agrupado al inicio.
+        if self._stack:
+            self._stack[-1].add(Node('error', msg, t[2], t[3]))
 
     def expect(self, value, context=''):
         """Consume el token si su lexema coincide; si no, registra error
@@ -139,8 +170,8 @@ class Parser:
         """Nodo de operador binario: dos hijos (izquierdo, derecho).
         La forma del árbol codifica precedencia y asociatividad."""
         n = Node('operador', op_tok[1], op_tok[2], op_tok[3])
-        n.children.append(left)
-        n.children.append(right)
+        n.add(left)    # add() ignora None (operando ausente por error sintáctico)
+        n.add(right)
         return n
 
     # ── Predicados ────────────────────────────────────────────────────────
@@ -157,7 +188,7 @@ class Parser:
         return self.parse_programa()
 
     def parse_programa(self):
-        node = Node('programa')
+        node = self._enter(Node('programa'))
         self.expect('main', 'programa')
         self.expect('{', 'programa')
         for hijo in self.parse_lista_declaracion():
@@ -165,7 +196,7 @@ class Parser:
         self.expect('}', 'programa')
         if not self._is_eof():
             self.error(f"tokens sobrantes tras «}}»: «{self._val()}»")
-        return node
+        return self._leave(node)
 
     def parse_lista_declaracion(self):
         """Devuelve una lista de nodos (declaraciones y sentencias)."""
@@ -191,12 +222,12 @@ class Parser:
 
     def parse_declaracion_variable(self):
         tipo = self.peek()
-        node = Node('declaracion_variable', tipo[1], tipo[2], tipo[3])
+        node = self._enter(Node('declaracion_variable', tipo[1], tipo[2], tipo[3]))
         self.advance()
         for ident in self.parse_identificador():
             node.add(ident)
         self.expect(';', 'declaracion_variable')
-        return node
+        return self._leave(node)
 
     def parse_identificador(self):
         """Devuelve la lista de nodos id declarados."""
@@ -238,18 +269,30 @@ class Parser:
         if val == 'cout':
             return self.parse_sent_out()
         if t[0] == 'IDENTIFIER':
+            if self.tokens[self.pos + 1][1] in INCR_OP:
+                return self.parse_incremento()
             return self.parse_asignacion()
         self.error(f"sentencia inesperada: «{val}»", t)
         self.advance()
         return None
 
+    def parse_incremento(self):
+        """id (++ | --) ;   → sentencia de incremento/decremento postfijo."""
+        t = self.peek()
+        op = self.tokens[self.pos + 1]
+        node = self._enter(Node('incremento', op[1], t[2], t[3]))
+        node.add(self.expect_type('IDENTIFIER', 'id', 'incremento'))
+        self.advance()                      # consume ++ / --
+        self.expect(';', 'incremento')
+        return self._leave(node)
+
     def parse_asignacion(self):
         t = self.peek()
-        node = Node('asignacion', '=', t[2], t[3])
+        node = self._enter(Node('asignacion', '=', t[2], t[3]))
         node.add(self.expect_type('IDENTIFIER', 'id', 'asignacion'))
         self.expect('=', 'asignacion')
         node.add(self.parse_sent_expresion())
-        return node
+        return self._leave(node)
 
     def parse_sent_expresion(self):
         """expresion ; | ;  → devuelve el nodo expresión, o None si vacía."""
@@ -262,7 +305,7 @@ class Parser:
 
     def parse_seleccion(self):
         t = self.peek()
-        node = Node('if', None, t[2], t[3])
+        node = self._enter(Node('if', None, t[2], t[3]))
         self.expect('if', 'seleccion')
         node.add(self.parse_expresion())
         self.expect('then', 'seleccion')
@@ -277,23 +320,30 @@ class Parser:
                 rama.add(s)
             node.add(rama)
         self.expect('end', 'seleccion')
-        return node
+        self.expect(';', 'seleccion')      # end ;
+        return self._leave(node)
 
     def parse_iteracion(self):
         t = self.peek()
-        node = Node('while', None, t[2], t[3])
+        node = self._enter(Node('while', None, t[2], t[3]))
         self.expect('while', 'iteracion')
-        node.add(self.parse_expresion())
+        node.add(self.parse_expresion())        # while ( cond )
+        if self._val() == ';':                  # cuerpo vacío: while(cond) ;
+            self.advance()
+            return self._leave(node)
+        self.expect('{', 'iteracion')           # cuerpo entre llaves
         cuerpo = Node('cuerpo')
-        for s in self.parse_lista_sentencias(stop=('end',)):
+        for s in self.parse_lista_sentencias(stop=('}',)):
             cuerpo.add(s)
         node.add(cuerpo)
-        self.expect('end', 'iteracion')
-        return node
+        self.expect('}', 'iteracion')
+        if self._val() == ';':                  # ';' final opcional tras '}'
+            self.advance()
+        return self._leave(node)
 
     def parse_repeticion(self):
         t = self.peek()
-        node = Node('do_while', None, t[2], t[3])
+        node = self._enter(Node('do_while', None, t[2], t[3]))
         self.expect('do', 'repeticion')
         cuerpo = Node('cuerpo')
         for s in self.parse_lista_sentencias(stop=('while',)):
@@ -301,27 +351,29 @@ class Parser:
         node.add(cuerpo)
         self.expect('while', 'repeticion')
         node.add(self.parse_expresion())
-        return node
+        if self._val() == ';':              # do … while ( cond ) ;
+            self.advance()
+        return self._leave(node)
 
     def parse_sent_in(self):
         t = self.peek()
-        node = Node('cin', None, t[2], t[3])
+        node = self._enter(Node('cin', None, t[2], t[3]))
         self.expect('cin', 'sent_in')
         self.expect('>>', 'sent_in')
         node.add(self.expect_type('IDENTIFIER', 'id', 'sent_in'))
         self.expect(';', 'sent_in')
-        return node
+        return self._leave(node)
 
     def parse_sent_out(self):
         t = self.peek()
-        node = Node('cout', None, t[2], t[3])
+        node = self._enter(Node('cout', None, t[2], t[3]))
         self.expect('cout', 'sent_out')
         self.expect('<<', 'sent_out')
         for parte in self.parse_salida():
             node.add(parte)
         if self._val() == ';':          # ';' final opcional (tolerancia)
             self.advance()
-        return node
+        return self._leave(node)
 
     def parse_salida(self):
         """Devuelve la lista de partes (cadena y/o expresión)."""
@@ -345,11 +397,22 @@ class Parser:
         return [p for p in partes if p is not None]
 
     # ── Expresiones ─────────────────────────────────────────────────────────
-    # Un nivel por escalón de precedencia. Bucle = asociatividad izquierda;
-    # recursión en el mismo nivel = asociatividad derecha. Cada operador
-    # produce un nodo binario, por lo que el árbol es no ambiguo.
+    # Un nivel por escalón de precedencia (rel < suma < mult < pot < op_logico).
+    # Cada producción del PDF es recursiva por la IZQUIERDA, por lo que todos
+    # los operadores binarios pliegan a la izquierda (bucle while). Cada
+    # operador produce un nodo binario «operador» con dos hijos → árbol no
+    # ambiguo que codifica precedencia y asociatividad en su forma.
 
     def parse_expresion(self):
+        # op_logico binario && || : precedencia más baja, asociativo izquierda.
+        node = self.parse_relacional()
+        while self._val() in LOGIC_OP:
+            op = self.advance()
+            right = self.parse_relacional()
+            node = self._binop(op, node, right)
+        return node
+
+    def parse_relacional(self):
         # rel_op: no asociativo → a lo sumo una comparación.
         left = self.parse_expresion_simple()
         if self._val() in REL_OP:
@@ -377,13 +440,14 @@ class Parser:
         return node
 
     def parse_factor(self):
-        # pot_op: asociatividad derecha  → a^(b^c)
-        base = self.parse_componente()
-        if self._val() in POT_OP:
+        # pot_op: asociatividad izquierda  → ((a^b)^c)
+        # (gramática: factor → factor pot_op componente, recursión izquierda)
+        node = self.parse_componente()
+        while self._val() in POT_OP:
             op = self.advance()
-            right = self.parse_factor()   # recursión derecha
-            return self._binop(op, base, right)
-        return base
+            right = self.parse_componente()
+            node = self._binop(op, node, right)
+        return node
 
     def parse_componente(self):
         t = self.peek()
@@ -401,7 +465,7 @@ class Parser:
         if t[0] == 'KEYWORD' and t[1] in ('bool', 'true', 'false'):
             self.advance()
             return Node('bool', t[1], t[2], t[3])
-        if t[1] in LOG_OP:                 # operador unario prefijo (! && ||)
+        if t[1] in NOT_OP:                 # op_logico unario ! : prefijo
             self.advance()
             n = Node('operador_unario', t[1], t[2], t[3])
             n.add(self.parse_componente())

@@ -1,5 +1,7 @@
 from PySide6.QtWidgets import QPlainTextEdit, QWidget, QTextEdit
-from PySide6.QtGui import QColor, QPainter, QTextFormat, QTextCursor
+from PySide6.QtGui import (
+    QColor, QPainter, QTextFormat, QTextCursor, QTextCharFormat,
+)
 from PySide6.QtCore import Qt, QRect, QSize, Signal
 
 from editor.syntax_highlighter import LexicalHighlighter
@@ -110,6 +112,9 @@ class CodeEditor(QPlainTextEdit):
 
         self.lineNumberArea = LineNumberArea(self)
 
+        # Subrayado rojo de errores (léxicos / sintácticos)
+        self._error_selections = []
+
         # ── Señales ───────────────────────────────────────────────────────────
         self.document().blockCountChanged.connect(self.updateLineNumberAreaWidth)
         self.verticalScrollBar().valueChanged.connect(self.updateLineNumberArea)
@@ -201,7 +206,56 @@ class CodeEditor(QPlainTextEdit):
             selection.cursor.clearSelection()
             extra_selections.append(selection)
 
+        # Subrayados de error se dibujan encima del resaltado de línea.
+        extra_selections.extend(self._error_selections)
+
         self.setExtraSelections(extra_selections)
+
+    # ── Marcado de errores ────────────────────────────────────────────────────
+
+    def set_error_markers(self, errors):
+        """Subraya en rojo cada posición de error y muestra el mensaje al pasar
+        el cursor. `errors`: lista de (linea, columna, mensaje) 1-basados."""
+        self._error_selections = []
+        doc = self.document()
+
+        for line, col, msg in errors:
+            block = doc.findBlockByNumber(max(0, line - 1))
+            if not block.isValid():
+                continue
+
+            cursor = QTextCursor(block)
+            cursor.movePosition(
+                QTextCursor.MoveOperation.Right,
+                QTextCursor.MoveMode.MoveAnchor,
+                max(0, col - 1),
+            )
+            # Seleccionar la palabra bajo el cursor; si no hay, hasta fin de línea.
+            cursor.select(QTextCursor.SelectionType.WordUnderCursor)
+            if not cursor.hasSelection():
+                cursor.movePosition(
+                    QTextCursor.MoveOperation.EndOfBlock,
+                    QTextCursor.MoveMode.KeepAnchor,
+                )
+
+            fmt = QTextCharFormat()
+            fmt.setUnderlineStyle(
+                QTextCharFormat.UnderlineStyle.SpellCheckUnderline
+            )
+            fmt.setUnderlineColor(QColor("#f38ba8"))
+            fmt.setToolTip(f"error: {msg}")
+
+            sel = QTextEdit.ExtraSelection()
+            sel.format = fmt
+            sel.cursor = cursor
+            self._error_selections.append(sel)
+
+        self.setMouseTracking(True)   # tooltips sin clic
+        self.highlightCurrentLine()   # re-aplica selecciones combinadas
+
+    def clear_error_markers(self):
+        self._error_selections = []
+        self.highlightCurrentLine()
 
     # ── Eventos ───────────────────────────────────────────────────────────────
 

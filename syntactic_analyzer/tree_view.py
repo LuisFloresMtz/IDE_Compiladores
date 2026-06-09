@@ -8,7 +8,10 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
     QLabel, QPushButton, QDockWidget,
 )
+from PySide6.QtGui import QColor, QBrush
 from PySide6.QtCore import Qt
+
+_ERROR_COLOR = QColor("#f38ba8")   # rojo para nodos de error
 
 try:
     from ui.top_bar import COLORS
@@ -106,10 +109,17 @@ class SyntaxTreeWindow(QWidget):
         self.tree.expandAll()   # expandido automáticamente al abrir
 
     def _populate(self, node, parent_item):
-        text = node.label()
+        if node is None:
+            return
+        if node.type == 'error':
+            text = f"✗ error: {node.value}"
+        else:
+            text = node.label()
         if node.line is not None:
             text += f"   (L{node.line}, C{node.col})"
         item = QTreeWidgetItem([text])
+        if node.type == 'error':
+            item.setForeground(0, QBrush(_ERROR_COLOR))
         parent_item.addChild(item)
         for child in node.children:
             self._populate(child, item)
@@ -170,12 +180,16 @@ class SyntaxTreePanel(QDockWidget):
 
         self.setWidget(root)
 
-    def set_ast(self, ast_root, n_errores=0):
+    def set_ast(self, ast_root, n_errores=0, errores=None):
+        """errores: lista de (mensaje, linea, columna) — se muestra en el árbol
+        como una rama roja «Errores sintácticos» antes del AST."""
         self.tree.clear()
+        errores = errores or []
+        n_errores = n_errores or len(errores)
 
         if n_errores:
             self.estado.setText(
-                f"⚠ {n_errores} error(es) sintáctico(s) — ver pestaña Errores"
+                f"⚠ {n_errores} error(es) sintáctico(s)"
             )
             self.estado.setStyleSheet(
                 "color: #f38ba8; font-family: 'Segoe UI'; font-size: 12px;"
@@ -191,10 +205,17 @@ class SyntaxTreePanel(QDockWidget):
         self.tree.expandAll()
 
     def _populate(self, node, parent_item):
-        text = node.label()
+        if node is None:
+            return
+        if node.type == 'error':
+            text = f"✗ error: {node.value}"
+        else:
+            text = node.label()
         if node.line is not None:
             text += f"   (L{node.line}, C{node.col})"
         item = QTreeWidgetItem([text])
+        if node.type == 'error':
+            item.setForeground(0, QBrush(_ERROR_COLOR))
         parent_item.addChild(item)
         for child in node.children:
             self._populate(child, item)
