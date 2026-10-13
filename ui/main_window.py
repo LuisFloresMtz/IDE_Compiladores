@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QLabel, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QMainWindow, QLabel, QFileDialog, QMessageBox, QTabWidget
 from PySide6.QtCore import Qt
 
 from editor.tab_editor import TabEditor
@@ -12,6 +12,8 @@ from lexical_analyzer.lexical_analyzer import (
 )
 from syntactic_analyzer.parser import parse_tokens
 from syntactic_analyzer.tree_view import SyntaxTreePanel
+from semantic_analyzer.semantic import analizar, volcar_arbol
+from semantic_analyzer.annotated_tree_view import AnnotatedTreePanel
 
 TIPO_ES = {
     'KEYWORD':        'PALABRA RESERVADA',
@@ -35,6 +37,24 @@ QStatusBar {{
 }}
 QDockWidget {{
     background: {COLORS['bg_dark']};
+}}
+/* Pestañas de los paneles acoplados (AST original / AST anotado) */
+QMainWindow > QTabBar::tab {{
+    background: {COLORS['bg_bar']};
+    color: {COLORS['text_dim']};
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 12px;
+    padding: 6px 16px;
+    border: none;
+    border-bottom: 2px solid transparent;
+}}
+QMainWindow > QTabBar::tab:hover {{
+    background: {COLORS['bg_hover']};
+    color: {COLORS['text']};
+}}
+QMainWindow > QTabBar::tab:selected {{
+    color: {COLORS['accent']};
+    border-bottom: 2px solid {COLORS['accent']};
 }}
 """
 
@@ -76,6 +96,15 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.tree_panel)
         self.resizeDocks([self.tree_panel], [360], Qt.Orientation.Horizontal)
         self.tree_panel.hide()   # oculto hasta el primer análisis sintáctico
+
+        # ── Panel derecho (árbol anotado), en pestaña junto al AST original ───
+        self.tree_panel.setWindowTitle("AST original")
+        self.sem_panel = AnnotatedTreePanel(self)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.sem_panel)
+        self.tabifyDockWidget(self.tree_panel, self.sem_panel)
+        self.setTabPosition(Qt.DockWidgetArea.RightDockWidgetArea,
+                            QTabWidget.TabPosition.North)
+        self.sem_panel.hide()    # oculto hasta el primer análisis semántico
 
         # ── Status bar ────────────────────────────────────────────────────────
         self.cursor_label = QLabel("Ln 1, Col 1")
@@ -292,7 +321,94 @@ class MainWindow(QMainWindow):
             self._print_ast(child, console, depth + 1)
 
     def run_semantico(self):
-        self.output_panel.write(self.output_panel.semantico_output, "▶ Análisis Semántico iniciado…", "info")
+        import traceback
+        panel = self.output_panel
+        consola = panel.semantico_output
+        try:
+            editor = self.tabeditor.current_editor()
+            if not editor:
+                consola.setPlainText("No hay ningún archivo abierto.")
+                self._show_output(2)
+                return
+
+            # ── 1) Fases previas: léxico y sintáctico ────────────────────────
+            source = editor.toPlainText()
+            tokens = tokenize_with_lines(source)
+            lexicos = [
+                (f"token no reconocido «{val}»", ln, col)
+                for tipo, val, ln, col in tokens if tipo == 'ERROR'
+            ]
+            stream = [t for t in tokens if t[0] not in ('COMMENT', 'ERROR')]
+            ast, sintacticos = parse_tokens(stream)
+
+            # ── 2) Análisis semántico sobre una copia del AST ────────────────
+            resultado = analizar(ast)
+            semanticos = resultado.errores
+
+            # ── 3) Consola Semántico: árbol anotado + recorrido ──────────────
+            consola.clear()
+            panel.write(consola, "▶ Análisis Semántico", "info")
+            if lexicos or sintacticos:
+                panel.write(
+                    consola,
+                    f"⚠ Hay {len(lexicos)} error(es) léxico(s) y {len(sintacticos)} "
+                    f"sintáctico(s): el análisis semántico puede ser incompleto.",
+                    "warning")
+
+            panel.write(consola, "", "text")
+            panel.write(consola, "── Árbol con anotaciones semánticas ──", "accent")
+            panel.write(consola, "   ↑ sintetizado   ↓ heredado", "dim")
+            for texto, con_error in volcar_arbol(resultado.arbol):
+                panel.write(consola, texto, "error" if con_error else "text")
+
+            panel.write(consola, "", "text")
+            panel.write(consola, "── Recorrido semántico ──", "accent")
+            for linea, texto in resultado.bitacora:
+                prefijo = f"L{linea:<3d} " if linea is not None else "     "
+                panel.write(consola, prefijo + texto,
+                            "error" if texto.startswith("✗") else "dim")
+
+            panel.write(consola, "", "text")
+            if semanticos:
+                panel.write(consola,
+                            f"✗ {len(semanticos)} error(es) semántico(s). Ver pestaña Errores.",
+                            "error")
+            else:
+                panel.write(consola, "✓ Análisis semántico correcto.", "success")
+
+            # ── 4) Pestaña Símbolos ──────────────────────────────────────────
+            panel.tabla_simbolos_output.setPlainText(resultado.tabla.formatear())
+
+            # ── 5) Pestaña Errores (lista separada por fase) ─────────────────
+            err_lines = [f"Léxico — Línea {ln}, columna {col}: {msg}"
+                         for msg, ln, col in lexicos]
+            err_lines += [f"Sintáctico — Línea {ln}, columna {col}: {msg}"
+                          for msg, ln, col in sintacticos]
+            err_lines += [f"Semántico — Línea {ln}, columna {col}: {msg}"
+                          for msg, ln, col in semanticos]
+            panel.errores_output.setPlainText(
+                "\n".join(err_lines) if err_lines
+                else "Sin errores léxicos, sintácticos ni semánticos.")
+
+            # ── 6) Subrayado de errores en el editor ─────────────────────────
+            markers = [(ln, col, f"léxico: {msg}") for msg, ln, col in lexicos]
+            markers += [(ln, col, msg) for msg, ln, col in sintacticos]
+            markers += [(ln, col, f"semántico: {msg}") for msg, ln, col in semanticos]
+            editor.set_error_markers(markers)
+
+            # ── 7) Paneles: AST original arriba, AST anotado abajo ───────────
+            self.tree_panel.set_ast(ast, errores=sintacticos)
+            self.sem_panel.set_arbol(resultado.arbol, errores=semanticos)
+            self.tree_panel.show()
+            self.sem_panel.show()
+            self.sem_panel.raise_()
+            self.resizeDocks([self.sem_panel], [560], Qt.Orientation.Horizontal)
+
+            self._show_output(2)
+
+        except Exception:
+            consola.setPlainText(traceback.format_exc())
+            self._show_output(2)
 
     def run_intermedio(self):
         self.output_panel.write(self.output_panel.codigo_intermedio_output, "▶ Generando código intermedio…", "info")
