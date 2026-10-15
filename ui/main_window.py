@@ -12,7 +12,7 @@ from lexical_analyzer.lexical_analyzer import (
 )
 from syntactic_analyzer.parser import parse_tokens
 from syntactic_analyzer.tree_view import SyntaxTreePanel
-from semantic_analyzer.semantic import analizar, volcar_arbol
+from semantic_analyzer.semantic import analizar, volcar_arbol, formatear_errores
 from semantic_analyzer.annotated_tree_view import AnnotatedTreePanel
 
 TIPO_ES = {
@@ -380,12 +380,9 @@ class MainWindow(QMainWindow):
             panel.tabla_simbolos_output.setPlainText(resultado.tabla.formatear())
 
             # ── 5) Pestaña Errores (lista separada por fase) ─────────────────
-            err_lines = [f"Léxico — Línea {ln}, columna {col}: {msg}"
-                         for msg, ln, col in lexicos]
-            err_lines += [f"Sintáctico — Línea {ln}, columna {col}: {msg}"
-                          for msg, ln, col in sintacticos]
-            err_lines += [f"Semántico — Línea {ln}, columna {col}: {msg}"
-                          for msg, ln, col in semanticos]
+            err_lines = formatear_errores(lexicos, 'LÉXICO')
+            err_lines += formatear_errores(sintacticos, 'SINTÁCTICO')
+            err_lines += formatear_errores(semanticos, 'SEMÁNTICO')
             panel.errores_output.setPlainText(
                 "\n".join(err_lines) if err_lines
                 else "Sin errores léxicos, sintácticos ni semánticos.")

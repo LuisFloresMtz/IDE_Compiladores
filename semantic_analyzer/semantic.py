@@ -10,19 +10,24 @@ semánticas del lenguaje:
   · Expresión    → el tipo (y el valor, si es constante) se SINTETIZA de los
                    hijos hacia el padre.
   · Asignación   → se compara el tipo de la variable con el de la expresión.
-  · Condiciones  → if / while / do-while exigen una expresión bool.
+  · Condiciones  → if / while / do-while / do-until exigen una expresión bool.
 
 Reglas de tipos
-  + - * / ^      numérico × numérico → int si ambos son int, float en otro caso
+  + - * ^        int × int → int;  si algún operando es float → float
+  /              int / int → int sólo si ambos valores se conocen y la división
+                 es exacta (8 / 2 → 4); en otro caso el cociente es real → float
+                 (2 * 4 / 7 → float).  Con algún float → float
   %              int × int → int
   < <= > >=      numérico × numérico → bool
   == !=          numérico × numérico → bool,  bool × bool → bool
   && ||          bool × bool → bool
   !              bool → bool
-Conversiones
-  int → float    permitida (implícita) en operaciones mixtas y al asignar a float
-  float → int    NO permitida (pérdida de información)
-  bool ↔ número  NO permitida
+Conversiones (casteo)
+  int → float    permitida e implícita: en operaciones mixtas y al asignar a
+                 una variable float. En el árbol anotado aparece como un nodo
+                 «conversion int→float» que envuelve al operando convertido.
+  float → int    NO permitida: se perdería la parte decimal.
+  bool ↔ número  NO permitida.
 
 El AST original no se modifica.
 """
@@ -30,8 +35,6 @@ El AST original no se modifica.
 from symbol_table.symbol_table import TablaSimbolos, formatear_valor
 
 NUMERICOS = ('int', 'float')
-ARIT_OP = {'+', '-', '*', '/', '^'}
-MOD_OP = {'%'}
 ORDEN_OP = {'<', '<=', '>', '>='}
 IGUAL_OP = {'==', '!='}
 LOGIC_OP = {'&&', '||'}
@@ -41,6 +44,19 @@ T_CADENA = 'cadena'
 
 SINTETIZADO = 'sintetizado'
 HEREDADO = 'heredado'
+
+# Categorías de error semántico (sección 8 de la especificación)
+E_NO_DECLARADO = 'Identificador no declarado'
+E_DUPLICADO = 'Declaración duplicada'
+E_INCOMPATIBLE = 'Incompatibilidad de tipos'
+E_CONVERSION = 'Conversión de tipos no válida'
+E_OPERADOR = 'Uso indebido de operador'
+E_CONDICION = 'Condición no booleana'
+E_SIN_VALOR = 'Variable sin valor asignado'
+E_DIV_CERO = 'División entre cero'
+
+CONSTRUCCION = {'if': 'if', 'while': 'while', 'do_while': 'do-while',
+                'do_until': 'do-until'}
 
 
 class NodoSem:
@@ -58,7 +74,7 @@ class NodoSem:
         self.dtype = None      # atributo de tipo
         self.val = None        # atributo de valor (None = no se conoce en compilación)
         self.origen = None     # SINTETIZADO | HEREDADO
-        self.conv = None       # conversión aplicada, p. ej. 'int→float'
+        self.conv = None       # descripción de la conversión (nodos «conversion»)
         self.errores = []      # errores semánticos detectados en este nodo
 
     def label(self):
@@ -75,7 +91,7 @@ class NodoSem:
         if self.val is not None:
             partes.append(f"valor: {formatear_valor(self.val)}")
         if self.conv:
-            partes.append(f"conv: {self.conv}")
+            partes.append(self.conv)
         return ' | '.join(partes)
 
 
@@ -130,16 +146,37 @@ class AnalizadorSemantico:
     def _log(self, nodo, texto):
         self.bitacora.append((nodo.line if nodo is not None else None, texto))
 
-    def _error(self, nodo, msg, pos=None):
+    def _error(self, nodo, categoria, msg, pos=None):
+        """Registra un error semántico. Se reporta en `pos` (o en `nodo`) y se
+        cuelga del nodo en el árbol anotado."""
         ref = pos if (pos is not None and pos.line is not None) else nodo
-        self.errores.append((msg, ref.line or 0, ref.col or 0))
-        nodo.errores.append(msg)
-        self._log(ref, f"✗ ERROR: {msg}")
+        texto = f"[{categoria}] {msg}"
+        self.errores.append((texto, ref.line or 0, ref.col or 0))
+        nodo.errores.append(texto)
+        self._log(ref, f"✗ ERROR: {texto}")
 
     @staticmethod
     def _hijos(nodo):
         """Hijos reales (se ignoran los nodos de error sintáctico)."""
         return [c for c in nodo.children if c.type != 'error']
+
+    def _castear(self, padre, hijo, motivo):
+        """Casteo implícito int→float: inserta un nodo «conversion» entre
+        `padre` y `hijo` en el árbol anotado y devuelve el nuevo nodo."""
+        cast = NodoSem('conversion', 'int→float', hijo.line, hijo.col)
+        cast.dtype = 'float'
+        cast.origen = SINTETIZADO
+        cast.conv = 'casteo implícito int→float'
+        if hijo.val is not None:
+            cast.val = float(hijo.val)
+        cast.children.append(hijo)
+        idx = next(i for i, c in enumerate(padre.children) if c is hijo)
+        padre.children[idx] = cast
+        self._log(hijo if hijo.line is not None else padre,
+                  f"casteo int→float {motivo}"
+                  + (f": {formatear_valor(hijo.val)} → {formatear_valor(cast.val)}"
+                     if hijo.val is not None else ''))
+        return cast
 
     # ── Propagación de valores constantes ───────────────────────────────────
     def _modificadas(self, nodo, acc=None):
@@ -181,6 +218,7 @@ class AnalizadorSemantico:
             'if': self._seleccion,
             'while': self._iteracion,
             'do_while': self._repeticion,
+            'do_until': self._repeticion,
             'cin': self._entrada,
             'cout': self._salida,
         }.get(n.type)
@@ -201,10 +239,9 @@ class AnalizadorSemantico:
             ident.origen = HEREDADO     # dtype baja de la declaración al id
             previo = self.tabla.buscar(ident.value)
             if previo is not None:
-                self._error(
-                    ident,
-                    f"declaración duplicada: «{ident.value}» ya fue declarado "
-                    f"como {previo.tipo} en la línea {previo.linea_decl}")
+                self._error(ident, E_DUPLICADO,
+                            f"'{ident.value}' ya fue declarada en la línea "
+                            f"{previo.linea_decl} como {previo.tipo}", pos=n)
                 continue
             sim = self.tabla.insertar(ident.value, tipo, ident.line, ident.col)
             self._log(ident, f"inserta «{sim.nombre}» en la tabla: tipo {tipo} "
@@ -216,7 +253,7 @@ class AnalizadorSemantico:
         sim = self.tabla.buscar(ident.value)
         if sim is None:
             ident.dtype = T_ERROR
-            self._error(ident, f"identificador no declarado: «{ident.value}»")
+            self._error(ident, E_NO_DECLARADO, f"Variable '{ident.value}' no declarada")
             return None
         self.tabla.registrar_linea(ident.value, ident.line)
         ident.dtype = sim.tipo
@@ -240,35 +277,35 @@ class AnalizadorSemantico:
         if sim is None:
             n.dtype = T_ERROR
             return
+        sim.inicializada = True
         n.dtype = sim.tipo
         n.origen = SINTETIZADO
         if expr is None or t_expr == T_ERROR:
             sim.valor = None
             return
 
-        valor = expr.val
         if t_expr == sim.tipo:
             pass
         elif sim.tipo == 'float' and t_expr == 'int':
-            expr.conv = 'int→float'
-            if valor is not None:
-                valor = float(valor)
-            self._log(expr, f"conversión int→float al asignar a «{sim.nombre}»")
+            expr = self._castear(n, expr, f"al asignar a «{sim.nombre}» (float)")
         elif sim.tipo == 'int' and t_expr == 'float':
-            self._error(n, f"conversión de tipos no válida: no se puede asignar "
-                           f"float a «{sim.nombre}» de tipo int", pos=expr)
+            self._error(n, E_CONVERSION,
+                        f"No se puede asignar un valor float a '{sim.nombre}' (int): "
+                        f"se perdería la parte decimal")
             sim.valor = None
             return
         else:
-            self._error(n, f"incompatibilidad de tipos en asignación: «{sim.nombre}» "
-                           f"es {sim.tipo} y la expresión es {t_expr}", pos=expr)
+            self._error(n, E_INCOMPATIBLE,
+                        f"No se puede asignar un valor {t_expr} a '{sim.nombre}' "
+                        f"({sim.tipo})")
             sim.valor = None
             return
 
-        sim.valor = valor
-        n.val = valor
-        self._log(n, f"asignación válida: «{sim.nombre}» ({sim.tipo}) = expresión ({t_expr})"
-                     + (f", valor {formatear_valor(valor)}" if valor is not None else ''))
+        sim.valor = expr.val
+        n.val = expr.val
+        self._log(n, f"asignación válida: «{sim.nombre}» ({sim.tipo}) ← {t_expr}"
+                     + (f", valor {formatear_valor(expr.val)}"
+                        if expr.val is not None else ''))
 
     def _incremento(self, n):
         hijos = self._hijos(n)
@@ -281,32 +318,39 @@ class AnalizadorSemantico:
             return
         if sim.tipo not in NUMERICOS:
             n.dtype = T_ERROR
-            self._error(n, f"uso indebido del operador «{n.value}»: no se aplica a "
-                           f"«{sim.nombre}» de tipo {sim.tipo}")
+            self._error(n, E_OPERADOR,
+                        f"No se puede aplicar '{n.value}' a '{sim.nombre}' de tipo {sim.tipo}")
             return
         n.dtype = sim.tipo
         n.origen = SINTETIZADO
+        if not sim.inicializada:
+            self._error(n, E_SIN_VALOR,
+                        f"No se puede aplicar '{n.value}' a '{sim.nombre}': "
+                        f"la variable no tiene un valor asignado")
+            return
         ident.val = sim.valor
         if sim.valor is not None:
             sim.valor = sim.valor + (1 if n.value == '++' else -1)
             n.val = sim.valor
 
-    def _condicion(self, n, cond, nombre):
+    def _condicion(self, n, cond):
         if cond is None:
             return
+        nombre = CONSTRUCCION.get(n.type, n.type)
         tipo = self._expr(cond)
-        ref = cond if cond.line is not None else n
         if tipo not in ('bool', T_ERROR):
-            self._error(n, f"la condición de «{nombre}» debe ser bool y se obtuvo {tipo}",
+            self._error(n, E_CONDICION,
+                        f"La condición del '{nombre}' debe ser bool y se obtuvo {tipo}",
                         pos=cond)
         else:
-            self._log(ref, f"condición de «{nombre}»: tipo {tipo}")
+            self._log(cond if cond.line is not None else n,
+                      f"condición de «{nombre}»: tipo {tipo}")
 
     def _seleccion(self, n):
         hijos = self._hijos(n)
         cond = next((h for h in hijos if h.type not in ('entonces', 'else')), None)
         ramas = [h for h in hijos if h.type in ('entonces', 'else')]
-        self._condicion(n, cond, 'if')
+        self._condicion(n, cond)
         # Cada rama parte del mismo estado; al salir, lo modificado es desconocido.
         estado = {s: s.valor for s in self.tabla.simbolos()}
         modificadas = set()
@@ -323,7 +367,7 @@ class AnalizadorSemantico:
         cuerpo = next((h for h in hijos if h.type == 'cuerpo'), None)
         modificadas = self._modificadas(cuerpo) if cuerpo is not None else set()
         self._olvidar(modificadas)       # el cuerpo puede repetirse
-        self._condicion(n, cond, 'while')
+        self._condicion(n, cond)
         if cuerpo is not None:
             self._bloque(cuerpo)
         self._olvidar(modificadas)
@@ -337,7 +381,7 @@ class AnalizadorSemantico:
         if cuerpo is not None:
             self._bloque(cuerpo)
         self._olvidar(modificadas)
-        self._condicion(n, cond, 'do-while')
+        self._condicion(n, cond)
 
     def _entrada(self, n):
         for h in self._hijos(n):
@@ -345,6 +389,7 @@ class AnalizadorSemantico:
                 sim = self._buscar_id(h, 'cin')
                 if sim is not None:
                     sim.valor = None      # se conoce hasta la ejecución
+                    sim.inicializada = True
                     n.dtype = sim.tipo
                     n.origen = SINTETIZADO
 
@@ -372,6 +417,10 @@ class AnalizadorSemantico:
         elif n.type == 'id':
             sim = self._buscar_id(n, 'expresión')
             if sim is not None:
+                if not sim.inicializada:
+                    self._error(n, E_SIN_VALOR,
+                                f"La variable '{sim.nombre}' se usa sin tener un "
+                                f"valor asignado")
                 n.val = sim.valor
         elif n.type == 'operador':
             self._binario(n)
@@ -392,8 +441,8 @@ class AnalizadorSemantico:
         if t == T_ERROR:
             return
         if t != 'bool':
-            self._error(n, f"uso indebido del operador «{n.value}»: requiere un "
-                           f"operando bool y se obtuvo {t}")
+            self._error(n, E_OPERADOR,
+                        f"El operador '{n.value}' requiere un operando bool y se obtuvo {t}")
             return
         if hijos[0].val is not None:
             n.val = not hijos[0].val
@@ -416,8 +465,9 @@ class AnalizadorSemantico:
             if hay_error:
                 return
             if ti != 'bool' or td != 'bool':
-                self._error(n, f"uso indebido del operador «{op}»: requiere operandos "
-                               f"bool y se obtuvo {ti} y {td}")
+                self._error(n, E_OPERADOR,
+                            f"El operador '{op}' requiere operandos bool y se obtuvo "
+                            f"{ti} y {td}")
                 return
             if izq.val is not None and der.val is not None:
                 n.val = (izq.val and der.val) if op == '&&' else (izq.val or der.val)
@@ -427,10 +477,10 @@ class AnalizadorSemantico:
             if hay_error:
                 return
             if ambos_num:
-                self._promover(n, izq, der)
+                izq, der = self._promover(n, izq, der)
             elif not (op in IGUAL_OP and ti == td == 'bool'):
-                self._error(n, f"incompatibilidad de tipos: el operador «{op}» no "
-                               f"puede comparar {ti} con {td}")
+                self._error(n, E_INCOMPATIBLE,
+                            f"El operador '{op}' no puede comparar {ti} con {td}")
                 return
             if izq.val is not None and der.val is not None:
                 a, b = izq.val, der.val
@@ -443,35 +493,59 @@ class AnalizadorSemantico:
                 return
             if not ambos_num:
                 n.dtype = T_ERROR
-                self._error(n, f"uso indebido del operador «{op}»: requiere operandos "
-                               f"numéricos y se obtuvo {ti} y {td}")
+                self._error(n, E_OPERADOR,
+                            f"El operador '{op}' requiere operandos numéricos y se "
+                            f"obtuvo {ti} y {td}")
                 return
-            if op in MOD_OP and (ti != 'int' or td != 'int'):
+            if op == '%' and (ti != 'int' or td != 'int'):
                 n.dtype = T_ERROR
-                self._error(n, f"uso indebido del operador «%»: requiere operandos "
-                               f"int y se obtuvo {ti} y {td}")
+                self._error(n, E_OPERADOR,
+                            f"El operador '%' requiere operandos int y se obtuvo "
+                            f"{ti} y {td}")
                 return
-            n.dtype = self._promover(n, izq, der)
-            if izq.val is not None and der.val is not None:
-                n.val = self._calcular(n, op, izq.val, der.val, n.dtype)
+            if op == '/' and ti == td == 'int':
+                self._division_entera(n, izq, der)
+            else:
+                izq, der = self._promover(n, izq, der)
+                n.dtype = izq.dtype
+                if izq.val is not None and der.val is not None:
+                    n.val = self._calcular(n, op, izq.val, der.val, n.dtype)
 
         self._log(n, f"«{op}»: {ti} {op} {td} → {n.dtype}"
                      + (f" = {formatear_valor(n.val)}" if n.val is not None else ''))
 
+    def _division_entera(self, n, izq, der):
+        """int / int: el resultado es int sólo si la división es exacta y ambos
+        valores se conocen en compilación; si no, el cociente es real (float)."""
+        a, b = izq.val, der.val
+        if b == 0:
+            n.dtype = 'int'
+            self._error(n, E_DIV_CERO, "El divisor del operador '/' vale cero")
+            return
+        if a is not None and b is not None and a % b == 0:
+            n.dtype = 'int'
+            n.val = _div_entera(a, b)
+            return
+        self._log(n, "división entre int no exacta (o no constante): "
+                     "el cociente es real, se castean ambos operandos")
+        izq = self._castear(n, izq, "por división no exacta")
+        der = self._castear(n, der, "por división no exacta")
+        n.dtype = 'float'
+        if izq.val is not None and der.val is not None:
+            n.val = izq.val / der.val
+
     def _promover(self, n, izq, der):
-        """Regla de conversión: int se convierte a float si el otro operando es float."""
+        """Regla de conversión: si un operando es float, el int se castea a float."""
         if izq.dtype == der.dtype:
-            return izq.dtype
-        for nodo in (izq, der):
-            if nodo.dtype == 'int':
-                nodo.conv = 'int→float'
-                self._log(nodo if nodo.line is not None else n,
-                          f"conversión int→float de un operando de «{n.value}»")
-        return 'float'
+            return izq, der
+        motivo = f"en operación mixta «{n.value}»"
+        if izq.dtype == 'int':
+            izq = self._castear(n, izq, motivo)
+        if der.dtype == 'int':
+            der = self._castear(n, der, motivo)
+        return izq, der
 
     def _calcular(self, n, op, a, b, tipo):
-        if tipo == 'float':
-            a, b = float(a), float(b)
         if op == '+':
             return a + b
         if op == '-':
@@ -481,11 +555,11 @@ class AnalizadorSemantico:
         if op == '^':
             return _potencia(a, b, tipo)
         if b == 0:
-            self._error(n, f"división entre cero en el operador «{op}»")
+            self._error(n, E_DIV_CERO, f"El divisor del operador '{op}' vale cero")
             return None
         if op == '/':
-            return _div_entera(a, b) if tipo == 'int' else a / b
-        return a - b * _div_entera(a, b)      # %
+            return a / b                      # float / float
+        return a - b * _div_entera(a, b)      # %  (int)
 
 
 def analizar(ast):
@@ -511,6 +585,12 @@ def volcar_arbol(nodo, depth=0, salida=None):
     return salida
 
 
+def formatear_errores(errores, fase='SEMÁNTICO'):
+    """Líneas de reporte: [ERROR SEMÁNTICO] Línea 4, Columna 5: [Categoría] mensaje"""
+    return [f"[ERROR {fase}] Línea {ln}, Columna {col}: {msg}"
+            for msg, ln, col in errores]
+
+
 if __name__ == '__main__':
     # Uso: python -m semantic_analyzer.semantic archivo.txt
     import sys
@@ -532,9 +612,9 @@ if __name__ == '__main__':
     print("\n── Tabla de símbolos ──")
     print(res.tabla.formatear())
     print("\n── Errores ──")
-    for msg, ln, col in sintacticos:
-        print(f"Sintáctico — Línea {ln}, columna {col}: {msg}")
-    for msg, ln, col in res.errores:
-        print(f"Semántico — Línea {ln}, columna {col}: {msg}")
+    for linea in formatear_errores(sintacticos, 'SINTÁCTICO'):
+        print(linea)
+    for linea in formatear_errores(res.errores):
+        print(linea)
     if not res.errores:
         print("Sin errores semánticos.")

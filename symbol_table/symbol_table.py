@@ -10,6 +10,7 @@ Por cada identificador se registra:
   · dirección de memoria (localidad consecutiva: 0, 1, 2, …)
   · números de línea donde aparece (declaración y usos)
   · valor conocido en compilación (None si sólo se sabe en ejecución)
+  · si ya recibió un valor (para detectar variables sin valor asignado)
 
 El analizador semántico la usa de verdad durante el recorrido del AST:
 `insertar` al procesar declaraciones y `buscar` en cada uso de identificador.
@@ -23,7 +24,7 @@ class Simbolo:
     """Registro de un identificador dentro de la tabla."""
 
     __slots__ = ('nombre', 'tipo', 'direccion', 'lineas',
-                 'linea_decl', 'col_decl', 'valor')
+                 'linea_decl', 'col_decl', 'valor', 'inicializada')
 
     def __init__(self, nombre, tipo, direccion, linea=None, col=None):
         self.nombre = nombre
@@ -33,6 +34,7 @@ class Simbolo:
         self.col_decl = col
         self.lineas = [linea] if linea is not None else []
         self.valor = None          # valor conocido en compilación
+        self.inicializada = False  # ¿ya recibió un valor (asignación o cin)?
 
     def __repr__(self):
         return (f"Simbolo({self.nombre!r}, {self.tipo!r}, "
@@ -108,7 +110,8 @@ class TablaSimbolos:
 
     # ── Presentación ────────────────────────────────────────────────────────
     def filas(self):
-        """Filas listas para mostrar: (nombre, tipo, dirección, hash, valor, líneas)."""
+        """Filas listas para mostrar: (nombre, tipo, dirección, hash, valor,
+        asignada, líneas)."""
         filas = []
         for s in self.simbolos():
             filas.append((
@@ -117,13 +120,14 @@ class TablaSimbolos:
                 str(s.direccion),
                 str(self.hash(s.nombre)),
                 formatear_valor(s.valor) if s.valor is not None else '—',
+                'sí' if s.inicializada else 'no',
                 ', '.join(str(l) for l in s.lineas),
             ))
         return filas
 
     def formatear(self):
         """Tabla en texto de ancho fijo para la pestaña «Símbolos»."""
-        encabezados = ('Nombre', 'Tipo', 'Dirección', 'Hash', 'Valor', 'Líneas')
+        encabezados = ('Nombre', 'Tipo', 'Dirección', 'Hash', 'Valor', 'Asignada', 'Líneas')
         filas = self.filas()
         if not filas:
             return "(tabla de símbolos vacía)"

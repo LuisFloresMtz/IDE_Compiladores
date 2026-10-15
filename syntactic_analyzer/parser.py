@@ -152,6 +152,9 @@ class Parser:
     def parse_programa(self):
         node = self._enter(Node('programa'))
         self.expect('main', 'programa')
+        if self._val() == '(':            # main() — paréntesis opcionales
+            self.advance()
+            self.expect(')', 'programa')
         self.expect('{', 'programa')
         for hijo in self.parse_lista_declaracion():
             node.add(hijo)
@@ -335,14 +338,24 @@ class Parser:
         node = self._enter(Node('do_while', None, t[2], t[3]))
         self.expect('do', 'repeticion')
         cuerpo = Node('cuerpo')
-        
-        # Restaurado a la lógica correcta de tu gramática original, pero
-        # protegido por la nueva inteligencia en parse_lista_sentencias
-        for s in self.parse_lista_sentencias(stop=('while',)):
-            cuerpo.add(s)
-            
+
+        if self._val() == '{':
+            # do { ... } until expr ;   |   do { ... } while expr ;
+            self.advance()
+            for s in self.parse_lista_sentencias(stop=('}',)):
+                cuerpo.add(s)
+            self.expect('}', 'repeticion')
+        else:
+            # do ... while expr ;   (protegido por _is_end_of_do_while)
+            for s in self.parse_lista_sentencias(stop=('while', 'until')):
+                cuerpo.add(s)
+
         node.add(cuerpo)
-        self.expect('while', 'repeticion')
+        if self._val() == 'until':
+            node.type = 'do_until'
+            self.advance()
+        else:
+            self.expect('while', 'repeticion')
         node.add(self.parse_expresion())
         if self._val() == ';':
             self.advance()
@@ -352,7 +365,18 @@ class Parser:
         t = self.peek()
         node = self._enter(Node('cin', None, t[2], t[3]))
         self.expect('cin', 'sent_in')
-        self.expect('>>', 'sent_in')
+        if not self.expect('>>', 'sent_in') and self._val() == '(':
+            # Recuperación para «cin(x);»: ya se reportó la falta de «>>»;
+            # se consume «( id )» sin más errores para no desbalancear bloques.
+            self.advance()
+            id_tok = self.peek()
+            if id_tok[0] == 'IDENTIFIER':
+                self.advance()
+                node.add(Node('id', id_tok[1], id_tok[2], id_tok[3]))
+            if self._val() == ')':
+                self.advance()
+            self.expect(';', 'sent_in')
+            return self._leave(node)
         node.add(self.expect_type('IDENTIFIER', 'id', 'sent_in'))
         self.expect(';', 'sent_in')
         return self._leave(node)
