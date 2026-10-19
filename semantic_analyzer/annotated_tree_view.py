@@ -1,20 +1,18 @@
 """Panel del Árbol con Anotaciones Semánticas.
 
-Muestra la copia anotada del AST en un QTreeWidget con columnas: la primera
-es el mismo nodo del AST original y las demás son los atributos que agregó
-el análisis semántico (tipo, valor, conversión / error). Así se puede
-comparar directamente contra el panel del AST original.
+Muestra la copia anotada del AST con la misma forma que el AST original;
+cada nodo lleva en la misma línea los atributos que agregó el análisis
+semántico: tipo (↑ sintetizado / ↓ heredado), valor, conversión y errores.
 """
 
 from PySide6.QtWidgets import (
+    QHeaderView,
     QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
-    QLabel, QPushButton, QDockWidget, QHeaderView,
+    QLabel, QPushButton, QDockWidget,
 )
 from PySide6.QtGui import QColor, QBrush
 from PySide6.QtCore import Qt
 
-from symbol_table.symbol_table import formatear_valor
-from semantic_analyzer.semantic import SINTETIZADO, HEREDADO
 
 try:
     from ui.top_bar import COLORS
@@ -80,8 +78,6 @@ QScrollBar::handle:horizontal {{ background: {COLORS['accent_dim']}; border-radi
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
 """
 
-_FLECHAS = {SINTETIZADO: '↑', HEREDADO: '↓'}
-
 
 class AnnotatedTreePanel(QDockWidget):
     """Panel acoplable con el AST anotado. Llamar `set_arbol(raiz, errores)`."""
@@ -120,21 +116,23 @@ class AnnotatedTreePanel(QDockWidget):
         self.estado = QLabel("")
         layout.addWidget(self.estado)
 
-        leyenda = QLabel("↑ atributo sintetizado (sube de los hijos)   "
-                         "↓ atributo heredado (baja de la declaración)")
+        leyenda = QLabel("↑ sintetizado (sube de los hijos)   ↓ heredado (baja de la "
+                         "declaración)   verde: tipo · amarillo: con valor · "
+                         "morado: conversión · rojo: error")
+        leyenda.setWordWrap(True)
         leyenda.setObjectName("leyenda")
         layout.addWidget(leyenda)
 
         self.tree = QTreeWidget()
-        self.tree.setColumnCount(4)
-        self.tree.setHeaderLabels(["Nodo", "Tipo", "Valor", "Conversión / Error"])
+        self.tree.setHeaderHidden(True)
         self.tree.setAnimated(True)
         self.tree.setIndentation(22)
-        header = self.tree.header()
-        header.setStretchLastSection(True)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        # Desplazamiento horizontal: la columna crece con el texto en vez de
+        # recortarlo con «…».
+        self.tree.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.tree.header().setStretchLastSection(False)
+        self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.tree)
 
         btn_exp.clicked.connect(self.tree.expandAll)
@@ -162,33 +160,27 @@ class AnnotatedTreePanel(QDockWidget):
         if node is None:
             return
         if node.type == 'error':
-            nodo_txt = f"✗ error: {node.value}"
+            texto = f"✗ error: {node.value}"
         else:
-            nodo_txt = node.label()
+            texto = node.label()
         if node.line is not None:
-            nodo_txt += f"   (L{node.line}, C{node.col})"
+            texto += f"   (L{node.line}, C{node.col})"
+        anot = node.anotacion()
+        if anot:
+            texto += f"   ⟹  {anot}"
+        for e in node.errores:
+            texto += f"   ✗ {e}"
 
-        tipo_txt = ''
-        if node.dtype is not None:
-            flecha = _FLECHAS.get(node.origen, '')
-            tipo_txt = f"{node.dtype} {flecha}".strip()
-        valor_txt = formatear_valor(node.val)
-        notas = []
-        if node.conv:
-            notas.append(node.conv)
-        notas += [f"✗ {e}" for e in node.errores]
-
-        item = QTreeWidgetItem([nodo_txt, tipo_txt, valor_txt, '   '.join(notas)])
-        item.setForeground(1, QBrush(_TIPO_COLOR))
-        item.setForeground(2, QBrush(_VALOR_COLOR))
-        item.setForeground(3, QBrush(_CONV_COLOR))
+        item = QTreeWidgetItem([texto])
         if node.errores or node.type == 'error':
             item.setForeground(0, QBrush(_ERROR_COLOR))
-            item.setForeground(3, QBrush(_ERROR_COLOR))
-        if node.dtype == 'error':
-            item.setForeground(1, QBrush(_ERROR_COLOR))
-        if notas:
-            item.setToolTip(3, '\n'.join(notas))
+        elif node.conv:
+            item.setForeground(0, QBrush(_CONV_COLOR))
+        elif node.val is not None:
+            item.setForeground(0, QBrush(_VALOR_COLOR))
+        elif node.dtype is not None:
+            item.setForeground(0, QBrush(_TIPO_COLOR))
+        item.setToolTip(0, texto)
         parent_item.addChild(item)
         for child in node.children:
             self._populate(child, item)

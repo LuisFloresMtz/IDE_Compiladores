@@ -8,7 +8,7 @@ Por cada identificador se registra:
   · nombre (lexema)
   · tipo de dato (int, float, bool)
   · dirección de memoria (localidad consecutiva: 0, 1, 2, …)
-  · números de línea donde aparece (declaración y usos)
+  · números de línea de cada aparición (declaración y usos, con repeticiones)
   · valor conocido en compilación (None si sólo se sabe en ejecución)
   · si ya recibió un valor (para detectar variables sin valor asignado)
 
@@ -93,9 +93,10 @@ class TablaSimbolos:
         return sim.tipo if sim else None
 
     def registrar_linea(self, nombre, linea):
-        """Agrega una línea de uso (sin repetir) al identificador."""
+        """Agrega la línea de un uso del identificador. Se registra cada
+        aparición: si sale dos veces en la línea 9, queda «9, 9»."""
         sim = self.buscar(nombre)
-        if sim is not None and linea is not None and linea not in sim.lineas:
+        if sim is not None and linea is not None:
             sim.lineas.append(linea)
         return sim
 
@@ -110,24 +111,21 @@ class TablaSimbolos:
 
     # ── Presentación ────────────────────────────────────────────────────────
     def filas(self):
-        """Filas listas para mostrar: (nombre, tipo, dirección, hash, valor,
-        asignada, líneas)."""
+        """Filas listas para mostrar: (nombre, tipo, dirección, valor, líneas)."""
         filas = []
         for s in self.simbolos():
             filas.append((
                 s.nombre,
                 s.tipo,
                 str(s.direccion),
-                str(self.hash(s.nombre)),
                 formatear_valor(s.valor) if s.valor is not None else '—',
-                'sí' if s.inicializada else 'no',
                 ', '.join(str(l) for l in s.lineas),
             ))
         return filas
 
     def formatear(self):
         """Tabla en texto de ancho fijo para la pestaña «Símbolos»."""
-        encabezados = ('Nombre', 'Tipo', 'Dirección', 'Hash', 'Valor', 'Asignada', 'Líneas')
+        encabezados = ('Nombre', 'Tipo', 'Dirección', 'Valor', 'Líneas')
         filas = self.filas()
         if not filas:
             return "(tabla de símbolos vacía)"

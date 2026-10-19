@@ -5,6 +5,7 @@ Muestra el AST con un QTreeWidget: estructura tipo carpeta, colapsable
 """
 
 from PySide6.QtWidgets import (
+    QHeaderView,
     QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
     QLabel, QPushButton, QDockWidget,
 )
@@ -99,6 +100,12 @@ class SyntaxTreeWindow(QWidget):
         self.tree.setHeaderHidden(True)
         self.tree.setAnimated(True)
         self.tree.setIndentation(22)
+        # Desplazamiento horizontal: la columna crece con el texto en vez de
+        # recortarlo con «…».
+        self.tree.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.tree.header().setStretchLastSection(False)
+        self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.tree)
 
         btn_exp.clicked.connect(self.tree.expandAll)
@@ -173,6 +180,12 @@ class SyntaxTreePanel(QDockWidget):
         self.tree.setHeaderHidden(True)
         self.tree.setAnimated(True)
         self.tree.setIndentation(22)
+        # Desplazamiento horizontal: la columna crece con el texto en vez de
+        # recortarlo con «…».
+        self.tree.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.tree.header().setStretchLastSection(False)
+        self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.tree)
 
         btn_exp.clicked.connect(self.tree.expandAll)

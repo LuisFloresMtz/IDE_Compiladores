@@ -376,8 +376,12 @@ class MainWindow(QMainWindow):
             else:
                 panel.write(consola, "✓ Análisis semántico correcto.", "success")
 
-            # ── 4) Pestaña Símbolos ──────────────────────────────────────────
-            panel.tabla_simbolos_output.setPlainText(resultado.tabla.formatear())
+            # ── 4) Pestaña Tabla de Símbolos (tabla real con columnas) ───────
+            panel.set_symbol_table(resultado.tabla.filas())
+            panel.write(consola, "", "text")
+            panel.write(consola, "── Tabla de símbolos ──", "accent")
+            for linea in resultado.tabla.formatear().splitlines():
+                panel.write(consola, linea, "text")
 
             # ── 5) Pestaña Errores (lista separada por fase) ─────────────────
             err_lines = formatear_errores(lexicos, 'LÉXICO')

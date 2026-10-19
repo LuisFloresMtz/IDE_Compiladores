@@ -1,4 +1,7 @@
-from PySide6.QtWidgets import QDockWidget, QTabWidget, QTextEdit, QWidget, QLabel, QHBoxLayout, QVBoxLayout
+from PySide6.QtWidgets import (
+    QDockWidget, QTabWidget, QTextEdit, QWidget, QLabel, QHBoxLayout, QVBoxLayout,
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextCharFormat, QColor, QTextCursor
 
@@ -122,6 +125,34 @@ QScrollBar::sub-line:horizontal {{
 """
 
 
+TABLE_STYLE = f"""
+QTableWidget {{
+    background-color: {CONSOLE_COLORS['bg']};
+    color: {CONSOLE_COLORS['text']};
+    border: none;
+    gridline-color: {COLORS['border']};
+    font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 13px;
+    selection-background-color: {COLORS['bg_pressed']};
+    selection-color: {COLORS['text']};
+}}
+QHeaderView::section {{
+    background-color: {COLORS['bg_bar']};
+    color: {COLORS['accent']};
+    border: none;
+    border-right: 1px solid {COLORS['border']};
+    border-bottom: 1px solid {COLORS['border']};
+    padding: 4px 8px;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+}}
+QTableCornerButton::section {{ background-color: {COLORS['bg_bar']}; border: none; }}
+""" + "QScrollBar:vertical" + CONSOLE_STYLE.split("QScrollBar:vertical", 1)[1]
+
+SYMBOL_HEADERS = ("Nombre", "Tipo", "Dirección", "Valor", "Líneas")
+
+
 class OutputPanels(QDockWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -175,7 +206,7 @@ class OutputPanels(QDockWidget):
         self.sintactico_output        = self._create_console()
         self.semantico_output         = self._create_console()
         self.codigo_intermedio_output = self._create_console()
-        self.tabla_simbolos_output    = self._create_console()
+        self.tabla_simbolos_output    = self._create_symbol_table()
         self.errores_output           = self._create_console()
         self.ejecucion_output         = self._create_console()
 
@@ -184,7 +215,7 @@ class OutputPanels(QDockWidget):
             (self.sintactico_output,        "Sintáctico"),
             (self.semantico_output,         "Semántico"),
             (self.codigo_intermedio_output, "Intermedio"),
-            (self.tabla_simbolos_output,    "Símbolos"),
+            (self.tabla_simbolos_output,    "Tabla de Símbolos"),
             (self.errores_output,           "Errores"),
             (self.ejecucion_output,         "Ejecución"),
         ]:
@@ -205,6 +236,35 @@ class OutputPanels(QDockWidget):
         console.setStyleSheet(CONSOLE_STYLE)
         return console
 
+    def _create_symbol_table(self) -> QTableWidget:
+        table = QTableWidget(0, len(SYMBOL_HEADERS))
+        table.setHorizontalHeaderLabels(SYMBOL_HEADERS)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.verticalHeader().setVisible(False)
+        header = table.horizontalHeader()
+        for i in range(len(SYMBOL_HEADERS) - 1):
+            header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
+        header.setStretchLastSection(True)
+        header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        table.setStyleSheet(TABLE_STYLE)
+        return table
+
+    def set_symbol_table(self, filas):
+        """filas: tuplas (nombre, tipo, dirección, valor, líneas)."""
+        table = self.tabla_simbolos_output
+        table.setRowCount(0)
+        for fila in filas:
+            r = table.rowCount()
+            table.insertRow(r)
+            for c, texto in enumerate(fila):
+                item = QTableWidgetItem(str(texto))
+                if c == 1:
+                    item.setForeground(QColor(CONSOLE_COLORS["success"]))
+                elif c == 3:
+                    item.setForeground(QColor(CONSOLE_COLORS["warning"]))
+                table.setItem(r, c, item)
+
     def write(self, console: QTextEdit, text: str, kind: str = "text"):
         """Escribe texto coloreado. kind: 'text'|'success'|'warning'|'error'|'info'|'dim'|'accent'"""
         color = CONSOLE_COLORS.get(kind, CONSOLE_COLORS["text"])
@@ -219,7 +279,8 @@ class OutputPanels(QDockWidget):
     def clear_all(self):
         for console in [
             self.lexico_output, self.sintactico_output, self.semantico_output,
-            self.codigo_intermedio_output, self.tabla_simbolos_output,
+            self.codigo_intermedio_output,
             self.errores_output, self.ejecucion_output,
         ]:
             console.clear()
+        self.tabla_simbolos_output.setRowCount(0)

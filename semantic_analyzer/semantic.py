@@ -14,19 +14,19 @@ semánticas del lenguaje:
 
 Reglas de tipos
   + - * ^        int × int → int;  si algún operando es float → float
-  /              int / int → int sólo si ambos valores se conocen y la división
-                 es exacta (8 / 2 → 4); en otro caso el cociente es real → float
-                 (2 * 4 / 7 → float).  Con algún float → float
+  /              int / int → int, división entera truncada como en C
+                 (1 / 3 → 0, 2 * 4 / 7 → 1).  Con algún float → float
   %              int × int → int
   < <= > >=      numérico × numérico → bool
   == !=          numérico × numérico → bool,  bool × bool → bool
   && ||          bool × bool → bool
   !              bool → bool
-Conversiones (casteo)
-  int → float    permitida e implícita: en operaciones mixtas y al asignar a
-                 una variable float. En el árbol anotado aparece como un nodo
-                 «conversion int→float» que envuelve al operando convertido.
-  float → int    NO permitida: se perdería la parte decimal.
+Conversiones
+  int en operación mixta con float → el operando int se promueve a float; en el
+                 árbol anotado se marca con el atributo «int→float» (el árbol
+                 conserva la misma forma que el AST original).
+  int asignado a variable float → compatible, se asigna tal cual (sin convertir).
+  float asignado a variable int → ERROR: se perdería la parte decimal.
   bool ↔ número  NO permitida.
 
 El AST original no se modifica.
@@ -74,7 +74,7 @@ class NodoSem:
         self.dtype = None      # atributo de tipo
         self.val = None        # atributo de valor (None = no se conoce en compilación)
         self.origen = None     # SINTETIZADO | HEREDADO
-        self.conv = None       # descripción de la conversión (nodos «conversion»)
+        self.conv = None       # conversión aplicada al nodo, p. ej. 'int→float'
         self.errores = []      # errores semánticos detectados en este nodo
 
     def label(self):
@@ -160,23 +160,13 @@ class AnalizadorSemantico:
         """Hijos reales (se ignoran los nodos de error sintáctico)."""
         return [c for c in nodo.children if c.type != 'error']
 
-    def _castear(self, padre, hijo, motivo):
-        """Casteo implícito int→float: inserta un nodo «conversion» entre
-        `padre` y `hijo` en el árbol anotado y devuelve el nuevo nodo."""
-        cast = NodoSem('conversion', 'int→float', hijo.line, hijo.col)
-        cast.dtype = 'float'
-        cast.origen = SINTETIZADO
-        cast.conv = 'casteo implícito int→float'
-        if hijo.val is not None:
-            cast.val = float(hijo.val)
-        cast.children.append(hijo)
-        idx = next(i for i, c in enumerate(padre.children) if c is hijo)
-        padre.children[idx] = cast
+    def _marcar_conversion(self, padre, hijo, motivo):
+        """Promoción int→float de un operando: se registra como atributo del
+        nodo (no se agregan nodos, el árbol conserva la forma del AST)."""
+        hijo.conv = 'int→float'
         self._log(hijo if hijo.line is not None else padre,
-                  f"casteo int→float {motivo}"
-                  + (f": {formatear_valor(hijo.val)} → {formatear_valor(cast.val)}"
-                     if hijo.val is not None else ''))
-        return cast
+                  f"promoción int→float {motivo}")
+        return hijo
 
     # ── Propagación de valores constantes ───────────────────────────────────
     def _modificadas(self, nodo, acc=None):
@@ -287,7 +277,7 @@ class AnalizadorSemantico:
         if t_expr == sim.tipo:
             pass
         elif sim.tipo == 'float' and t_expr == 'int':
-            expr = self._castear(n, expr, f"al asignar a «{sim.nombre}» (float)")
+            pass                    # compatible: el entero se asigna sin convertir
         elif sim.tipo == 'int' and t_expr == 'float':
             self._error(n, E_CONVERSION,
                         f"No se puede asignar un valor float a '{sim.nombre}' (int): "
@@ -303,6 +293,7 @@ class AnalizadorSemantico:
 
         sim.valor = expr.val
         n.val = expr.val
+        ident.val = expr.val        # el valor se propaga al identificador destino
         self._log(n, f"asignación válida: «{sim.nombre}» ({sim.tipo}) ← {t_expr}"
                      + (f", valor {formatear_valor(expr.val)}"
                         if expr.val is not None else ''))
@@ -507,7 +498,7 @@ class AnalizadorSemantico:
                 self._division_entera(n, izq, der)
             else:
                 izq, der = self._promover(n, izq, der)
-                n.dtype = izq.dtype
+                n.dtype = 'float' if 'float' in (izq.dtype, der.dtype) else 'int'
                 if izq.val is not None and der.val is not None:
                     n.val = self._calcular(n, op, izq.val, der.val, n.dtype)
 
@@ -515,24 +506,17 @@ class AnalizadorSemantico:
                      + (f" = {formatear_valor(n.val)}" if n.val is not None else ''))
 
     def _division_entera(self, n, izq, der):
-        """int / int: el resultado es int sólo si la división es exacta y ambos
-        valores se conocen en compilación; si no, el cociente es real (float)."""
+        """int / int: división entera, como en C. El resultado es int y se
+        trunca hacia cero (1 / 3 → 0, 7 / 2 → 3, -7 / 2 → -3)."""
         a, b = izq.val, der.val
+        n.dtype = 'int'
         if b == 0:
-            n.dtype = 'int'
             self._error(n, E_DIV_CERO, "El divisor del operador '/' vale cero")
             return
-        if a is not None and b is not None and a % b == 0:
-            n.dtype = 'int'
+        if a is not None and b is not None:
             n.val = _div_entera(a, b)
-            return
-        self._log(n, "división entre int no exacta (o no constante): "
-                     "el cociente es real, se castean ambos operandos")
-        izq = self._castear(n, izq, "por división no exacta")
-        der = self._castear(n, der, "por división no exacta")
-        n.dtype = 'float'
-        if izq.val is not None and der.val is not None:
-            n.val = izq.val / der.val
+            if a % b != 0:
+                self._log(n, f"división entera: {a} / {b} se trunca a {n.val}")
 
     def _promover(self, n, izq, der):
         """Regla de conversión: si un operando es float, el int se castea a float."""
@@ -540,9 +524,9 @@ class AnalizadorSemantico:
             return izq, der
         motivo = f"en operación mixta «{n.value}»"
         if izq.dtype == 'int':
-            izq = self._castear(n, izq, motivo)
+            self._marcar_conversion(n, izq, motivo)
         if der.dtype == 'int':
-            der = self._castear(n, der, motivo)
+            self._marcar_conversion(n, der, motivo)
         return izq, der
 
     def _calcular(self, n, op, a, b, tipo):
